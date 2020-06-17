@@ -13,7 +13,7 @@ func (e EventLogger) HandlerType() eh.EventHandlerType {
 }
 
 func (e EventLogger) HandleEvent(ctx context.Context, event eh.Event) error {
-	log.Printf("Eventlogger: %+v \n", event)
+	log.Printf("[Eventlogger]: %+v \n", event)
 	return nil
 }
 

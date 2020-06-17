@@ -2,14 +2,24 @@ package consent
 
 import (
 	"context"
-	"fmt"
-	"github.com/looplab/eventhorizon"
+	"github.com/google/uuid"
+	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
+	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	"log"
 	"time"
 )
 
-const ConsentAggregateType = eventhorizon.AggregateType("consent")
+func init() {
+	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
+		return &ConsentAggregate{
+			AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+		}
+	})
+}
+
+const ConsentAggregateType = eh.AggregateType("consent")
 
 type ConsentAggregateState string
 
@@ -31,12 +41,11 @@ type ConsentAggregate struct {
 	State ConsentAggregateState
 }
 
-func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eventhorizon.Command) error {
-	fmt.Printf("ConsentAggregate command: %+v", command)
+func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
+	log.Printf("[ConsentAggregate] command: %v, %+v\n", command.CommandType(), command)
 	switch cmd := command.(type) {
 	case *Propose:
-		fmt.Printf("cmd with ID: %s\n", cmd.ID)
-		c.StoreEvent(Proposed, ProposedData{
+		c.StoreEvent(events2.Proposed, events2.ProposedData{
 			ID:          cmd.ID,
 			CustodianID: cmd.CustodianID,
 			SubjectID:   cmd.SubjectID,
@@ -44,14 +53,16 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eventhoriz
 			Start:       cmd.Start,
 		}, TimeNow())
 	case *Cancel:
-		c.StoreEvent(Canceled, nil, TimeNow())
+		c.StoreEvent(events2.Canceled, nil, TimeNow())
+	case *MarkAsUnique:
+		c.StoreEvent(events2.Unique, nil, TimeNow())
 	default:
 		return domain.ErrUnknownCommand
 	}
 	return nil
 }
 
-func (c *ConsentAggregate) ApplyEvent(ctx context.Context, event eventhorizon.Event) error {
-	fmt.Printf("ConsentAggregate event: %+v\n", event)
+func (c *ConsentAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
+	log.Printf("[ConsentAggregate] event: %+v\n", event)
 	return nil
 }

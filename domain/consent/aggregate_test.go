@@ -7,6 +7,7 @@ import (
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/mocks"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
+	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"reflect"
 	"testing"
 	"time"
@@ -45,7 +46,7 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
-			}, []eh.Event{eh.NewEventForAggregate(Proposed, ProposedData{
+			}, []eh.Event{eh.NewEventForAggregate(events2.Proposed, events2.ProposedData{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",

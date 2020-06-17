@@ -1,4 +1,4 @@
-package consent
+package events
 
 import (
 	"github.com/google/uuid"
@@ -8,6 +8,7 @@ import (
 
 const Proposed = eh.EventType("consent:proposed")
 const Canceled = eh.EventType("consent:canceled")
+const Unique = eh.EventType("consent:unique")
 
 type ProposedData struct {
 	ID          uuid.UUID
