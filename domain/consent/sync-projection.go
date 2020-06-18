@@ -8,14 +8,17 @@ import (
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/projector"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
+	"log"
 	"time"
 )
 
 type ConsentNegotiation struct {
-	ID uuid.UUID
-	Version int
+	ID        uuid.UUID
+	SyncID    uuid.UUID
+	PartyIDs  []string
+	Version   int
 	UpdatedAt time.Time
-	Contract string
+	Contract  string
 }
 
 var _ = eh.Versionable(&ConsentNegotiation{})
@@ -33,6 +36,7 @@ type SyncProjector struct {
 }
 
 func (p SyncProjector) Project(ctx context.Context, event eh.Event, entity eh.Entity) (eh.Entity, error) {
+	log.Printf("[SyncProjector] event: %+v\n", event)
 	model, ok := entity.(*ConsentNegotiation)
 	if !ok {
 		return nil, errors.New("model is of incorrect type")
@@ -45,10 +49,18 @@ func (p SyncProjector) Project(ctx context.Context, event eh.Event, entity eh.En
 			return nil, errors.New("event data of wrong type")
 		}
 		model.ID = event.AggregateID()
-		model.Contract = fmt.Sprintf("custodian:%s,actor:%s,subject:%s",data.CustodianID, data.ActorID, data.SubjectID)
-	case events.Unique:
+		model.Contract = fmt.Sprintf("custodian:%s,actor:%s,subject:%s", data.CustodianID, data.ActorID, data.SubjectID)
+		model.PartyIDs = append(model.PartyIDs, data.SubjectID, data.CustodianID, data.ActorID)
+	//case events.Unique:
+	case events.SyncStarted:
+		data, ok := event.Data().(events.SyncStartedData)
+		if !ok {
+			return nil, errors.New("event data of wrong type")
+		}
+		model.SyncID = data.SyncID
 	default:
-		return model, fmt.Errorf("could not project event: %s", event.EventType())
+		//return model, fmt.Errorf("could not project event: %s", event.EventType())
+		log.Printf("could not project event: %s\n", event.EventType())
 	}
 	model.Version++
 	model.UpdatedAt = TimeNow()
@@ -58,4 +70,3 @@ func (p SyncProjector) Project(ctx context.Context, event eh.Event, entity eh.En
 func (p SyncProjector) ProjectorType() projector.Type {
 	return projector.Type("sync-projector")
 }
-

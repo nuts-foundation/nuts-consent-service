@@ -9,6 +9,7 @@ import (
 const Proposed = eh.EventType("consent:proposed")
 const Canceled = eh.EventType("consent:canceled")
 const Unique = eh.EventType("consent:unique")
+const SyncStarted = eh.EventType("consent:sync-started")
 
 type ProposedData struct {
 	ID          uuid.UUID
@@ -18,9 +19,17 @@ type ProposedData struct {
 	Start       time.Time
 }
 
+type SyncStartedData struct {
+	SyncID uuid.UUID
+}
+
 func init() {
 	eh.RegisterEventData(Proposed, func() eh.EventData {
 		return &ProposedData{}
+	})
+
+	eh.RegisterEventData(SyncStarted, func() eh.EventData {
+		return &SyncStartedData{}
 	})
 }
 

@@ -35,10 +35,6 @@ var TimeNow = func() time.Time {
 type ConsentAggregate struct {
 	*events.AggregateBase
 
-	CustodianID string
-	SubjectID   string
-	ActorID     string
-
 	State ConsentAggregateState
 }
 
@@ -63,6 +59,8 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 		c.StoreEvent(events2.Canceled, nil, TimeNow())
 	case *MarkAsUnique:
 		c.StoreEvent(events2.Unique, nil, TimeNow())
+	case *StartSync:
+		c.StoreEvent(events2.SyncStarted, events2.SyncStartedData{SyncID: cmd.SyncID}, TimeNow())
 	default:
 		return domain.ErrUnknownCommand
 	}

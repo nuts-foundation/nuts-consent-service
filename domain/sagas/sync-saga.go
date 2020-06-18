@@ -4,7 +4,9 @@ import (
 	"context"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
+	"github.com/nuts-foundation/nuts-consent-service/negotiator/local"
 	"log"
 )
 
@@ -25,13 +27,28 @@ func (s SyncSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Command {
 	case events.Unique:
 		log.Println("[SyncSaga] Consent is unique, let's sync!")
 
-		negotiation, err := s.NegotiationRepo.Find(ctx, event.AggregateID())
+		// make sure we get the latest version
+		versionedCtx, _ := eh.NewContextWithMinVersionWait(ctx, event.Version())
+		entity, err := s.NegotiationRepo.Find(versionedCtx, event.AggregateID())
 		if err != nil {
 			panic(err)
+		}
+		negotiation, ok := entity.(*consent.ConsentNegotiation)
+		if !ok {
+			log.Panic("entity is not of type ConsentNegotiation")
 		}
 
 		log.Printf("%+v\n", negotiation)
 
+		syncId, err := local.LocalNegotiator{}.Start(negotiation.PartyIDs, negotiation.Contract)
+		if err != nil {
+			log.Printf("could not start the sync: %+v", err)
+			// Todo: return command mark-as-errored
+		}
+		return []eh.Command{&consent.StartSync{
+			ID:     event.AggregateID(),
+			SyncID: syncId,
+		}}
 	default:
 		log.Printf("[SyncSaga] unknown eventtype '%s'\n", event.EventType())
 	}

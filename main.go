@@ -12,6 +12,7 @@ import (
 	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"github.com/looplab/eventhorizon/eventstore/memory"
 	memory2 "github.com/looplab/eventhorizon/repo/memory"
+	"github.com/looplab/eventhorizon/repo/version"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/sagas"
@@ -55,17 +56,18 @@ func main() {
 	if err := commandBus.SetHandler(consentCommandHandler, consent.MarkAsUniqueCmdType); err != nil {
 		panic(err)
 	}
+	commandBus.SetHandler(consentCommandHandler, consent.StartSyncCmdType)
 
 	uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
 
-	negotiationRepo := memory2.NewRepo()
+	negotiationRepo := version.NewRepo(memory2.NewRepo())
 	projector := projector2.NewEventHandler(&consent.SyncProjector{}, negotiationRepo)
 	projector.SetEntityFactory(func() eh.Entity { return &consent.ConsentNegotiation{} })
 	eventbus.AddHandler(eh.MatchAny(), projector)
 
 	syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
-	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Proposed, events2.Unique), syncSaga)
+	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
 
 	id := uuid.New()
 
@@ -82,9 +84,13 @@ func main() {
 	//proposeConsentCmd.ID = uuid.New()
 	//err = commandBus.HandleCommand(context.Background(), proposeConsentCmd)
 
-	for {
-		log.Println(<-eventbus.Errors())
-	}
+	go func() {
+		for e := range eventbus.Errors() {
+			log.Printf("eventbus: %s", e.Error())
+		}
+	}()
+
+	time.Sleep(5*time.Second)
 
 	println("end")
 }
