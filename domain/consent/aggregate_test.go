@@ -54,6 +54,14 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 				Start:       TimeNow(),
 			},TimeNow(), ConsentAggregateType, id, 1)}, nil,
 		},
+		"any command when cancelled": {
+			&ConsentAggregate{
+				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+				State: ConsentRequestCanceled,
+			}, &mocks.Command{ID: id},
+			nil,
+			domain.ErrAggregateCancelled,
+		},
 	}
 
 	for name, testcase := range cases {

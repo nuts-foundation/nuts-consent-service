@@ -26,6 +26,7 @@ type ConsentAggregateState string
 const ConsentRequestPending = ConsentAggregateState("pending")
 const ConsentRequestCompleted = ConsentAggregateState("completed")
 const ConsentRequestErrored = ConsentAggregateState("errored")
+const ConsentRequestCanceled = ConsentAggregateState("canceled")
 
 var TimeNow = func() time.Time {
 	return time.Now()
@@ -43,6 +44,12 @@ type ConsentAggregate struct {
 
 func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
 	log.Printf("[ConsentAggregate] command: %v, %+v\n", command.CommandType(), command)
+
+	// Reject every command when the Consent is cancelled
+	if c.State == ConsentRequestCanceled {
+		return domain.ErrAggregateCancelled
+	}
+
 	switch cmd := command.(type) {
 	case *Propose:
 		c.StoreEvent(events2.Proposed, events2.ProposedData{
@@ -64,5 +71,9 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 
 func (c *ConsentAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
 	log.Printf("[ConsentAggregate] event: %+v\n", event)
+	switch event.EventType() {
+	case events2.Canceled:
+		c.State = ConsentRequestCanceled
+	}
 	return nil
 }
