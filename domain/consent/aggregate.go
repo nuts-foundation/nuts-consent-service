@@ -47,6 +47,9 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 	}
 
 	switch cmd := command.(type) {
+	case *MarkAsErrored:
+		log.Printf("consent marked as errord with reason %s\n", cmd.Reason)
+		c.StoreEvent(events2.Errored, nil, TimeNow())
 	case *Propose:
 		c.StoreEvent(events2.Proposed, events2.ProposedData{
 			ID:          cmd.ID,
@@ -72,6 +75,8 @@ func (c *ConsentAggregate) ApplyEvent(ctx context.Context, event eh.Event) error
 	switch event.EventType() {
 	case events2.Canceled:
 		c.State = ConsentRequestCanceled
+	case events2.Errored:
+		c.State = ConsentRequestErrored
 	}
 	return nil
 }

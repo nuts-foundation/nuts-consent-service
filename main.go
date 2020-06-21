@@ -53,6 +53,7 @@ func main() {
 	if err := commandBus.SetHandler(consentCommandHandler, consent.CancelCmdType); err != nil {
 		panic(err)
 	}
+	commandBus.SetHandler(consentCommandHandler, consent.MarkAsErroredCmdType)
 	if err := commandBus.SetHandler(consentCommandHandler, consent.MarkAsUniqueCmdType); err != nil {
 		panic(err)
 	}
@@ -68,6 +69,9 @@ func main() {
 
 	syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
 	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
+
+	checkPartiesSaga := saga.NewEventHandler(sagas.CheckPartiesSaga{},commandBus)
+	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Proposed), checkPartiesSaga)
 
 	id := uuid.New()
 

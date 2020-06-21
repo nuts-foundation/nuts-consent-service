@@ -8,6 +8,7 @@ import (
 
 const Proposed = eh.EventType("consent:proposed")
 const Canceled = eh.EventType("consent:canceled")
+const Errored = eh.EventType("consent:errored")
 const Unique = eh.EventType("consent:unique")
 const SyncStarted = eh.EventType("consent:sync-started")
 
