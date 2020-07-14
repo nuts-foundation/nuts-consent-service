@@ -59,8 +59,7 @@ func (p SyncProjector) Project(ctx context.Context, event eh.Event, entity eh.En
 		}
 		model.SyncID = data.SyncID
 	default:
-		//return model, fmt.Errorf("could not project event: %s", event.EventType())
-		log.Printf("could not project event: %s\n", event.EventType())
+		log.Printf("[SyncProjector] could not project event: %s\n", event.EventType())
 	}
 	model.Version++
 	model.UpdatedAt = TimeNow()

@@ -48,5 +48,6 @@ func (c CheckPartiesSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Comm
 func (CheckPartiesSaga) CheckCustodian(custodianID string) bool {
 	crypto := pkg.NewCryptoClient()
 	legalEntity := types.LegalEntity{URI: custodianID}
-	return crypto.KeyExistsFor(legalEntity)
+	entityKey := types.KeyForEntity(legalEntity)
+	return crypto.PrivateKeyExists(entityKey)
 }

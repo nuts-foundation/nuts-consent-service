@@ -38,11 +38,11 @@ func (s SyncSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Command {
 			log.Panic("entity is not of type ConsentNegotiation")
 		}
 
-		log.Printf("%+v\n", negotiation)
+		log.Printf("[SyncSaga] negotiation: %+v\n", negotiation)
 
 		syncId, err := local.LocalNegotiator{}.Start(negotiation.PartyIDs, negotiation.Contract)
 		if err != nil {
-			log.Printf("could not start the sync: %+v", err)
+			log.Printf("[SyncSaga] could not start the sync: %+v", err)
 			// Todo: return command mark-as-errored
 		}
 		return []eh.Command{&consent.StartSync{

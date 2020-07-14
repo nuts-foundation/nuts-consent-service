@@ -16,6 +16,8 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/sagas"
+	"github.com/nuts-foundation/nuts-crypto/pkg"
+	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	"log"
 	"time"
 )
@@ -47,17 +49,12 @@ func main() {
 
 	//consentCommandHandler = eh.UseCommandHandlerMiddleware(consentCommandHandler, eventLogger.CommandLogger)
 	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
-	if err := commandBus.SetHandler(consentCommandHandler, consent.ProposeCmdType); err != nil {
-		panic(err)
-	}
-	if err := commandBus.SetHandler(consentCommandHandler, consent.CancelCmdType); err != nil {
-		panic(err)
-	}
+	commandBus.SetHandler(consentCommandHandler, consent.ProposeCmdType)
+	commandBus.SetHandler(consentCommandHandler, consent.CancelCmdType)
 	commandBus.SetHandler(consentCommandHandler, consent.MarkAsErroredCmdType)
-	if err := commandBus.SetHandler(consentCommandHandler, consent.MarkAsUniqueCmdType); err != nil {
-		panic(err)
-	}
+	commandBus.SetHandler(consentCommandHandler, consent.MarkAsUniqueCmdType)
 	commandBus.SetHandler(consentCommandHandler, consent.StartSyncCmdType)
+	commandBus.SetHandler(consentCommandHandler, consent.MarkCustodianCheckedCmdType)
 
 	uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
@@ -70,14 +67,20 @@ func main() {
 	syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
 	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
 
-	checkPartiesSaga := saga.NewEventHandler(sagas.CheckPartiesSaga{},commandBus)
+	checkPartiesSaga := saga.NewEventHandler(sagas.CheckPartiesSaga{}, commandBus)
 	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Proposed), checkPartiesSaga)
 
 	id := uuid.New()
 
+	// make sure the custodian has a keypair in the truststore
+	crypto := pkg.NewCryptoClient()
+	custodianID := "agb:123"
+	keyID := types.KeyForEntity(types.LegalEntity{custodianID})
+	crypto.GenerateKeyPair(keyID)
+
 	proposeConsentCmd := &consent.Propose{
 		ID:          id,
-		CustodianID: "agb:123",
+		CustodianID: custodianID,
 		SubjectID:   "bsn:999",
 		ActorID:     "agb:456",
 		Start:       time.Now(),
@@ -94,7 +97,7 @@ func main() {
 		}
 	}()
 
-	time.Sleep(5*time.Second)
+	time.Sleep(5 * time.Second)
 
 	println("end")
 }

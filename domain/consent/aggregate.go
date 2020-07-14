@@ -64,6 +64,8 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 		c.StoreEvent(events2.Unique, nil, TimeNow())
 	case *StartSync:
 		c.StoreEvent(events2.SyncStarted, events2.SyncStartedData{SyncID: cmd.SyncID}, TimeNow())
+	case *MarkCustodianChecked:
+		c.StoreEvent(events2.CustodianChecked, nil, TimeNow())
 	default:
 		return domain.ErrUnknownCommand
 	}

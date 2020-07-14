@@ -11,6 +11,7 @@ const Canceled = eh.EventType("consent:canceled")
 const Errored = eh.EventType("consent:errored")
 const Unique = eh.EventType("consent:unique")
 const SyncStarted = eh.EventType("consent:sync-started")
+const CustodianChecked = eh.EventType("consent:custodian-checked")
 
 type ProposedData struct {
 	ID          uuid.UUID
