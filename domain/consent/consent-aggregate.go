@@ -2,7 +2,6 @@ package consent
 
 import (
 	"context"
-	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
@@ -11,14 +10,6 @@ import (
 	"log"
 	"time"
 )
-
-func init() {
-	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
-		return &ConsentAggregate{
-			AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
-		}
-	})
-}
 
 
 type ConsentAggregateState string

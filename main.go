@@ -6,12 +6,8 @@ import (
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/commandhandler/aggregate"
-	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/looplab/eventhorizon/eventbus/local"
-	projector2 "github.com/looplab/eventhorizon/eventhandler/projector"
 	"github.com/looplab/eventhorizon/eventstore/memory"
-	memory2 "github.com/looplab/eventhorizon/repo/memory"
-	"github.com/looplab/eventhorizon/repo/version"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
@@ -21,12 +17,21 @@ import (
 	"time"
 )
 
+func init() {
+	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
+		return &consent.ConsentAggregate{
+			AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
+		}
+	})
+}
+
 func main() {
+
 	println("nuts consent service")
 
 	eventstore := memory.NewEventStore()
 	eventbus := local.NewEventBus(local.NewGroup())
-	commandBus := bus.NewCommandHandler()
+	//commandBus := bus.NewCommandHandler()
 
 	eventLogger := &EventLogger{}
 	eventbus.AddObserver(eh.MatchAny(), eventLogger)
@@ -48,7 +53,7 @@ func main() {
 
 	//consentCommandHandler = eh.UseCommandHandlerMiddleware(consentCommandHandler, eventLogger.CommandLogger)
 	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
-	commandBus.SetHandler(consentCommandHandler, commands.RegisterConsentCmdType)
+	//commandBus.SetHandler(consentCommandHandler, commands.RegisterConsentCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)
@@ -58,10 +63,10 @@ func main() {
 	//uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	//eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
 
-	negotiationRepo := version.NewRepo(memory2.NewRepo())
-	projector := projector2.NewEventHandler(&consent.SyncProjector{}, negotiationRepo)
-	projector.SetEntityFactory(func() eh.Entity { return &consent.ConsentNegotiation{} })
-	eventbus.AddHandler(eh.MatchAny(), projector)
+	//negotiationRepo := version.NewRepo(memory2.NewRepo())
+	//projector := projector2.NewEventHandler(&consent.SyncProjector{}, negotiationRepo)
+	//projector.SetEntityFactory(func() eh.Entity { return &consent.ConsentNegotiation{} })
+	//eventbus.AddHandler(eh.MatchAny(), projector)
 
 	//syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
 	//eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
@@ -82,17 +87,21 @@ func main() {
 		CustodianID: custodianID,
 		SubjectID:   "bsn:999",
 		ActorID:     "agb:456",
+		Class:       "transfer",
 		Start:       time.Now(),
 	}
 
-	err = commandBus.HandleCommand(context.Background(), proposeConsentCmd)
+	err = consentCommandHandler.HandleCommand(context.Background(), proposeConsentCmd)
+	if err != nil {
+		log.Printf("[main] unable to handle command: %s\n", err)
+	}
 
 	//proposeConsentCmd.ID = uuid.New()
 	//err = commandBus.HandleCommand(context.Background(), proposeConsentCmd)
 
 	go func() {
 		for e := range eventbus.Errors() {
-			log.Printf("eventbus: %s", e.Error())
+			log.Printf("[eventbus] %s\n", e.Error())
 		}
 	}()
 
