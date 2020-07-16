@@ -7,13 +7,17 @@ import (
 )
 
 const ConsentRequestRegistered = eh.EventType("consent:request-registered")
+const ReservationAccepted = eh.EventType("treatment-relation:consent-reservation-accepted")
+const ReservationRejected = eh.EventType("treatment-relation:consent-reservation-rejected")
 
-type RequestData struct {
+type ConsentData struct {
 	ID          uuid.UUID
 	CustodianID string
 	SubjectID   string
 	ActorID     string
+	Class       string
 	Start       time.Time
+	End         time.Time
 }
 
 type SyncStartedData struct {
@@ -22,8 +26,9 @@ type SyncStartedData struct {
 
 func init() {
 	eh.RegisterEventData(ConsentRequestRegistered, func() eh.EventData {
-		return &RequestData{}
+		return &ConsentData{}
+	})
+	eh.RegisterEventData(ReservationAccepted, func() eh.EventData {
+		return &ConsentData{}
 	})
 }
-
-

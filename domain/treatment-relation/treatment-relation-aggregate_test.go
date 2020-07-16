@@ -1,4 +1,4 @@
-package consent
+package treatment_relation
 
 import (
 	"context"
@@ -8,27 +8,27 @@ import (
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/mocks"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
-	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
-	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	domainEvents "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
 	"reflect"
 	"testing"
 	"time"
 )
 
-func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
+func TestTreatmentRelationAggregate_HandleCommand(t *testing.T) {
 	TimeNow = func() time.Time {
 		return time.Date(2017, time.July, 10, 23, 0, 0, 0, time.Local)
 	}
 
 	id := uuid.New()
 	cases := map[string]struct {
-		agg            *ConsentAggregate
+		agg            *TreatmentRelationAggregate
 		cmd            eh.Command
 		expectedEvents []eh.Event
 		expectedError  error
 	}{
 		"unknown command": {
-			&ConsentAggregate{
+			&TreatmentRelationAggregate{
 				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
 			&mocks.Command{
@@ -38,17 +38,17 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 			nil,
 			domain.ErrUnknownCommand,
 		},
-		"register consent": {
-			&ConsentAggregate{
+		"reserve consent": {
+			&TreatmentRelationAggregate{
 				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
-			&commands.RegisterConsent{
+			&treatmentRelationCommands.ReserveConsent{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
-			}, []eh.Event{eh.NewEventForAggregate(events2.ConsentRequestRegistered, events2.ConsentData{
+			}, []eh.Event{eh.NewEventForAggregate(domainEvents.ReservationAccepted, domainEvents.ConsentData{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",

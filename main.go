@@ -6,11 +6,17 @@ import (
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/commandhandler/aggregate"
+	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/looplab/eventhorizon/eventbus/local"
+	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"github.com/looplab/eventhorizon/eventstore/memory"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
-	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
+	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
+	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	process_managers "github.com/nuts-foundation/nuts-consent-service/domain/process-managers"
+	treatment_relation "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation"
+	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	"log"
@@ -23,6 +29,11 @@ func init() {
 			AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 		}
 	})
+	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
+		return &treatment_relation.TreatmentRelationAggregate{
+			AggregateBase: events.NewAggregateBase(domain.TreatmentRelationAggregateType, id),
+		}
+	})
 }
 
 func main() {
@@ -31,7 +42,7 @@ func main() {
 
 	eventstore := memory.NewEventStore()
 	eventbus := local.NewEventBus(local.NewGroup())
-	//commandBus := bus.NewCommandHandler()
+	commandBus := bus.NewCommandHandler()
 
 	eventLogger := &EventLogger{}
 	eventbus.AddObserver(eh.MatchAny(), eventLogger)
@@ -46,6 +57,8 @@ func main() {
 		log.Fatal(err)
 	}
 
+	treatmentCommandHander, err := aggregate.NewCommandHandler(domain.TreatmentRelationAggregateType, aggregateStore)
+
 	//negotiationCommandHandler, err := aggregate.NewCommandHandler(negotiation.ConsentNegotiationAggregateType, aggregateStore)
 	//if err != nil {
 	//	log.Fatal(err)
@@ -53,13 +66,16 @@ func main() {
 
 	//consentCommandHandler = eh.UseCommandHandlerMiddleware(consentCommandHandler, eventLogger.CommandLogger)
 	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
-	//commandBus.SetHandler(consentCommandHandler, commands.RegisterConsentCmdType)
+	commandBus.SetHandler(consentCommandHandler, consentCommands.RegisterConsentCmdType)
+	commandBus.SetHandler(treatmentCommandHander, treatmentRelationCommands.ReserveConsentCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.StartSyncCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
 
+	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{}, commandBus)
+	eventbus.AddHandler(eh.MatchEvent(events2.ConsentRequestRegistered), consentProgressManager)
 	//uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	//eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
 
@@ -82,7 +98,7 @@ func main() {
 	keyID := types.KeyForEntity(types.LegalEntity{custodianID})
 	crypto.GenerateKeyPair(keyID)
 
-	proposeConsentCmd := &commands.RegisterConsent{
+	proposeConsentCmd := &consentCommands.RegisterConsent{
 		ID:          id,
 		CustodianID: custodianID,
 		SubjectID:   "bsn:999",

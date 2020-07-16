@@ -2,6 +2,7 @@ package consent
 
 import (
 	"context"
+	"fmt"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
@@ -11,14 +12,6 @@ import (
 	"time"
 )
 
-
-type ConsentAggregateState string
-
-const ConsentRequestPending = ConsentAggregateState("pending")
-const ConsentRequestCompleted = ConsentAggregateState("completed")
-const ConsentRequestErrored = ConsentAggregateState("errored")
-const ConsentRequestCanceled = ConsentAggregateState("canceled")
-
 var TimeNow = func() time.Time {
 	return time.Now()
 }
@@ -26,8 +19,6 @@ var TimeNow = func() time.Time {
 // ConsentAggregate represents the consistency boundary for a specific consent
 type ConsentAggregate struct {
 	*events.AggregateBase
-
-	//State ConsentAggregateState
 }
 
 func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
@@ -35,15 +26,17 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 
 	switch cmd := command.(type) {
 	case *commands.RegisterConsent:
-		c.StoreEvent(events2.ConsentRequestRegistered, events2.RequestData{
+		c.StoreEvent(events2.ConsentRequestRegistered, events2.ConsentData{
 			ID:          cmd.ID,
 			CustodianID: cmd.CustodianID,
 			SubjectID:   cmd.SubjectID,
 			ActorID:     cmd.ActorID,
+			Class:       cmd.Class,
 			Start:       cmd.Start,
+			End:         cmd.End,
 		}, TimeNow())
 	default:
-		return domain.ErrUnknownCommand
+		return fmt.Errorf("[ConsentAggregate] could not handle command '%s': %w\n", command.CommandType(), domain.ErrUnknownCommand)
 	}
 	return nil
 }
