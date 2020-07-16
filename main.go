@@ -23,6 +23,7 @@ import (
 	"time"
 )
 
+
 func init() {
 	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
 		return &consent.ConsentAggregate{
@@ -68,6 +69,7 @@ func main() {
 	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
 	commandBus.SetHandler(consentCommandHandler, consentCommands.RegisterConsentCmdType)
 	commandBus.SetHandler(treatmentCommandHander, treatmentRelationCommands.ReserveConsentCmdType)
+	commandBus.SetHandler(consentCommandHandler, consentCommands.RejectConsentCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)

@@ -2,11 +2,16 @@ package process_managers
 
 import (
 	"context"
+	"fmt"
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
+	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
-	"github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
+	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
+	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
+	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	"log"
 )
 
@@ -30,9 +35,34 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 		if !ok {
 			return nil
 		}
+
+		cryptoClient := nutsCryto.NewCryptoClient()
+		legalEntity := types.LegalEntity{URI: data.CustodianID}
+		entityKey := types.KeyForEntity(legalEntity)
+		custodianCheck := cryptoClient.PrivateKeyExists(entityKey)
+
+		if !custodianCheck {
+			return []eh.Command{
+				&consentCommands.RejectConsentRequest{
+					ID:     data.ID,
+					Reason: "Custodian is not managed by this node",
+				},
+			}
+		}
+
+		treatmentID, err := c.CalculateExternalID(data)
+		if err != nil {
+			return []eh.Command{
+				&consentCommands.RejectConsentRequest{
+					ID:     data.ID,
+					Reason: fmt.Sprintf("Could not generate treatmentID: %s", err),
+				},
+			}
+		}
+
 		return []eh.Command{
-			&commands.ReserveConsent{
-				ID:          uuid.New(),
+			&treatmentRelationCommands.ReserveConsent{
+				ID:          treatmentID,
 				CustodianID: data.CustodianID,
 				SubjectID:   data.SubjectID,
 				ActorID:     data.ActorID,
@@ -44,4 +74,15 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 	}
 
 	return nil
+}
+
+func (c ConsentProgressManager) CalculateExternalID(data events.ConsentData) (uuid.UUID, error) {
+	legalEntity := types.LegalEntity{URI: data.CustodianID}
+	entityKey := types.KeyForEntity(legalEntity)
+	cryptoClient := nutsCryto.NewCryptoClient()
+	externalID, err := cryptoClient.CalculateExternalId(data.SubjectID, data.ActorID, entityKey)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return uuid.NewSHA1(domain.NutsExternalIDSpace, externalID), nil
 }
