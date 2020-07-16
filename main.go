@@ -77,7 +77,7 @@ func main() {
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
 
 	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{}, commandBus)
-	eventbus.AddHandler(eh.MatchEvent(events2.ConsentRequestRegistered), consentProgressManager)
+	eventbus.AddHandler(eh.MatchAnyEventOf(events2.ConsentRequestRegistered, events2.ReservationAccepted), consentProgressManager)
 	//uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	//eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
 

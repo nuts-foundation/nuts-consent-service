@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
+	consent_utils "github.com/nuts-foundation/nuts-consent-service/consent-utils"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
@@ -71,6 +72,25 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 				End:         data.End,
 			},
 		}
+	case events.ReservationAccepted:
+		data, ok := event.Data().(events.ConsentData)
+		if !ok {
+			log.Println("[ConsentProsessManager] could not cast data from ReservationAccepted event")
+		}
+		utils := consent_utils.ConsentUtils{}
+
+		var fhirConsent string
+		var err error
+
+		if fhirConsent, err = utils.CreateFhirConsentResource(data); err != nil {
+			return []eh.Command{
+				&consentCommands.RejectConsentRequest{
+					ID:     data.ID,
+					Reason: fmt.Sprintf("[ConsentProsessManager] could not create the FHIR consent resource: %w", err),
+				},
+			}
+		}
+		log.Printf("[ConsentProsessManager] FHIR resource created: %s\n", fhirConsent)
 	}
 
 	return nil
