@@ -4,7 +4,9 @@ import (
 	"context"
 	"github.com/google/uuid"
 	"github.com/looplab/eventhorizon"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"reflect"
 	"testing"
@@ -29,13 +31,13 @@ func TestUniquenessSaga_RunSaga(t *testing.T) {
 	}{
 		"first time": {
 			UniquenessSaga{existingIds: make([]string, 0)},
-			eventhorizon.NewEventForAggregate(events.Proposed, proposedData, consent.TimeNow(), consent.ConsentAggregateType, id, 1),
-			[]eventhorizon.Command{&consent.MarkAsUnique{ID: id}},
+			eventhorizon.NewEventForAggregate(events.Proposed, proposedData, consent.TimeNow(), domain.ConsentAggregateType, id, 1),
+			[]eventhorizon.Command{&commands.MarkAsUnique{ID: id}},
 		},
 		"duplicate": {
 			UniquenessSaga{existingIds: []string{uniqeID}},
-			eventhorizon.NewEventForAggregate(events.Proposed, proposedData, consent.TimeNow(), consent.ConsentAggregateType, id, 1),
-			[]eventhorizon.Command{&consent.Cancel{
+			eventhorizon.NewEventForAggregate(events.Proposed, proposedData, consent.TimeNow(), domain.ConsentAggregateType, id, 1),
+			[]eventhorizon.Command{&commands.Cancel{
 				ID:     id,
 				Reason: "duplicate consent",
 			}},

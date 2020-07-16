@@ -1,8 +1,9 @@
-package consent
+package commands
 
 import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
 )
 
 const MarkAsUniqueCmdType = eh.CommandType("consent:mark-as-unique")
@@ -22,7 +23,7 @@ func (cmd MarkAsUnique) AggregateID() uuid.UUID {
 }
 
 func (cmd MarkAsUnique) AggregateType() eh.AggregateType {
-	return ConsentAggregateType
+	return domain.ConsentAggregateType
 }
 
 func (cmd MarkAsUnique) CommandType() eh.CommandType {

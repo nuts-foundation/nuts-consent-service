@@ -1,8 +1,9 @@
-package consent
+package commands
 
 import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
 )
 
 const CancelCmdType = eh.CommandType("consent:cancel")
@@ -23,7 +24,7 @@ func (c Cancel) AggregateID() uuid.UUID {
 }
 
 func (c Cancel) AggregateType() eh.AggregateType {
-	return ConsentAggregateType
+	return domain.ConsentAggregateType
 }
 
 func (c Cancel) CommandType() eh.CommandType {

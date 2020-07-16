@@ -4,7 +4,7 @@ import (
 	"context"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
-	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
@@ -24,18 +24,18 @@ func (c CheckPartiesSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Comm
 	case events.Proposed:
 		data, ok := event.Data().(events.ProposedData)
 		if !ok {
-			return []eh.Command{&consent.MarkAsErrored{
+			return []eh.Command{&commands.MarkAsErrored{
 				ID:     event.AggregateID(),
 				Reason: "event did not contain proposedData",
 			}}
 		}
 
 		if c.CheckCustodian(data.CustodianID) {
-			return []eh.Command{&consent.MarkCustodianChecked{
+			return []eh.Command{&commands.MarkCustodianChecked{
 				ID:     event.AggregateID(),
 			}}
 		} else {
-			return []eh.Command{&consent.MarkAsErrored{
+			return []eh.Command{&commands.MarkAsErrored{
 				ID:     event.AggregateID(),
 				Reason: "custodian is not a valid or known party",
 			}}

@@ -4,7 +4,7 @@ import (
 	"context"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
-	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"log"
 )
@@ -35,14 +35,14 @@ func (s *UniquenessSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Comma
 				log.Printf("[UniquenessSaga] against known id: %v\n", existingId)
 				if id == existingId {
 					log.Println("[UniquenessSaga] duplicate found!")
-					return []eh.Command{&consent.Cancel{
+					return []eh.Command{&commands.Cancel{
 						ID:     event.AggregateID(),
 						Reason: "duplicate consent",
 					}}
 				}
 			}
 			s.existingIds = append(s.existingIds, id)
-			return []eh.Command{&consent.MarkAsUnique{
+			return []eh.Command{&commands.MarkAsUnique{
 				ID: event.AggregateID(),
 			}}
 		}

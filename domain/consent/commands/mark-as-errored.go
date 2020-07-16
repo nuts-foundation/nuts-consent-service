@@ -1,8 +1,9 @@
-package consent
+package commands
 
 import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
 )
 
 const MarkAsErroredCmdType = eh.CommandType("consent:mark-as-errored")
@@ -23,7 +24,7 @@ func (cmd MarkAsErrored) AggregateID() uuid.UUID {
 }
 
 func (cmd MarkAsErrored) AggregateType() eh.AggregateType {
-	return ConsentAggregateType
+	return domain.ConsentAggregateType
 }
 
 func (cmd MarkAsErrored) CommandType() eh.CommandType {

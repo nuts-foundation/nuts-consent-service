@@ -6,6 +6,7 @@ import (
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"log"
 	"time"
@@ -14,12 +15,11 @@ import (
 func init() {
 	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
 		return &ConsentAggregate{
-			AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+			AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 		}
 	})
 }
 
-const ConsentAggregateType = eh.AggregateType("consent")
 
 type ConsentAggregateState string
 
@@ -32,6 +32,12 @@ var TimeNow = func() time.Time {
 	return time.Now()
 }
 
+// ConsentAggregate represents the consistency boundary for a set of consents
+// for a specific set of parties: a DataCustodian, Patient and a selected actor
+// who can access the data.
+// What makes one consent unique from another, apart from the parties, is the
+// scope and the Period. There can not be any overlap in the period for a consent
+// with a specific scope.
 type ConsentAggregate struct {
 	*events.AggregateBase
 
@@ -47,10 +53,10 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 	}
 
 	switch cmd := command.(type) {
-	case *MarkAsErrored:
+	case *commands.MarkAsErrored:
 		log.Printf("consent marked as errord with reason %s\n", cmd.Reason)
 		c.StoreEvent(events2.Errored, nil, TimeNow())
-	case *Propose:
+	case *commands.Propose:
 		c.StoreEvent(events2.Proposed, events2.ProposedData{
 			ID:          cmd.ID,
 			CustodianID: cmd.CustodianID,
@@ -58,13 +64,13 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 			ActorID:     cmd.ActorID,
 			Start:       cmd.Start,
 		}, TimeNow())
-	case *Cancel:
+	case *commands.Cancel:
 		c.StoreEvent(events2.Canceled, nil, TimeNow())
-	case *MarkAsUnique:
+	case *commands.MarkAsUnique:
 		c.StoreEvent(events2.Unique, nil, TimeNow())
-	case *StartSync:
+	case *commands.StartSync:
 		c.StoreEvent(events2.SyncStarted, events2.SyncStartedData{SyncID: cmd.SyncID}, TimeNow())
-	case *MarkCustodianChecked:
+	case *commands.MarkCustodianChecked:
 		c.StoreEvent(events2.CustodianChecked, nil, TimeNow())
 	default:
 		return domain.ErrUnknownCommand

@@ -13,7 +13,9 @@ import (
 	"github.com/looplab/eventhorizon/eventstore/memory"
 	memory2 "github.com/looplab/eventhorizon/repo/memory"
 	"github.com/looplab/eventhorizon/repo/version"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/sagas"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
@@ -37,7 +39,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	consentCommandHandler, err := aggregate.NewCommandHandler(consent.ConsentAggregateType, aggregateStore)
+	consentCommandHandler, err := aggregate.NewCommandHandler(domain.ConsentAggregateType, aggregateStore)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -49,12 +51,12 @@ func main() {
 
 	//consentCommandHandler = eh.UseCommandHandlerMiddleware(consentCommandHandler, eventLogger.CommandLogger)
 	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
-	commandBus.SetHandler(consentCommandHandler, consent.ProposeCmdType)
-	commandBus.SetHandler(consentCommandHandler, consent.CancelCmdType)
-	commandBus.SetHandler(consentCommandHandler, consent.MarkAsErroredCmdType)
-	commandBus.SetHandler(consentCommandHandler, consent.MarkAsUniqueCmdType)
-	commandBus.SetHandler(consentCommandHandler, consent.StartSyncCmdType)
-	commandBus.SetHandler(consentCommandHandler, consent.MarkCustodianCheckedCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.ProposeCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.StartSyncCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
 
 	uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
@@ -78,7 +80,7 @@ func main() {
 	keyID := types.KeyForEntity(types.LegalEntity{custodianID})
 	crypto.GenerateKeyPair(keyID)
 
-	proposeConsentCmd := &consent.Propose{
+	proposeConsentCmd := &commands.Propose{
 		ID:          id,
 		CustodianID: custodianID,
 		SubjectID:   "bsn:999",

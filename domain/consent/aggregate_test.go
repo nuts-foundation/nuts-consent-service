@@ -7,6 +7,7 @@ import (
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/mocks"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"reflect"
 	"testing"
@@ -27,7 +28,7 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 	}{
 		"unknown command": {
 			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
 			&mocks.Command{
 				ID:      id,
@@ -38,9 +39,9 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 		},
 		"propose consent": {
 			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
-			&Propose{
+			&commands.Propose{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
@@ -52,12 +53,12 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
-			},TimeNow(), ConsentAggregateType, id, 1)}, nil,
+			}, TimeNow(), domain.ConsentAggregateType, id, 1)}, nil,
 		},
 		"any command when cancelled": {
 			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
-				State: ConsentRequestCanceled,
+				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
+				State:         ConsentRequestCanceled,
 			}, &mocks.Command{ID: id},
 			nil,
 			domain.ErrAggregateCancelled,

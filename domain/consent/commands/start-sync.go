@@ -1,8 +1,9 @@
-package consent
+package commands
 
 import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
 )
 
 const StartSyncCmdType = eh.CommandType("consent:start-sync")
@@ -17,7 +18,7 @@ func (cmd StartSync) AggregateID() uuid.UUID {
 }
 
 func (cmd StartSync) AggregateType() eh.AggregateType {
-	return ConsentAggregateType
+	return domain.ConsentAggregateType
 }
 
 func (cmd StartSync) CommandType() eh.CommandType {

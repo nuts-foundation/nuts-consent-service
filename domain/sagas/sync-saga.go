@@ -5,6 +5,7 @@ import (
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/negotiator/local"
 	"log"
@@ -45,7 +46,7 @@ func (s SyncSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Command {
 			log.Printf("[SyncSaga] could not start the sync: %+v", err)
 			// Todo: return command mark-as-errored
 		}
-		return []eh.Command{&consent.StartSync{
+		return []eh.Command{&commands.StartSync{
 			ID:     event.AggregateID(),
 			SyncID: syncId,
 		}}
