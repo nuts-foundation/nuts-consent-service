@@ -6,14 +6,9 @@ import (
 	"time"
 )
 
-const Proposed = eh.EventType("consent:proposed")
-const Canceled = eh.EventType("consent:canceled")
-const Errored = eh.EventType("consent:errored")
-const Unique = eh.EventType("consent:unique")
-const SyncStarted = eh.EventType("consent:sync-started")
-const CustodianChecked = eh.EventType("consent:custodian-checked")
+const ConsentRequestRegistered = eh.EventType("consent:request-registered")
 
-type ProposedData struct {
+type RequestData struct {
 	ID          uuid.UUID
 	CustodianID string
 	SubjectID   string
@@ -26,12 +21,8 @@ type SyncStartedData struct {
 }
 
 func init() {
-	eh.RegisterEventData(Proposed, func() eh.EventData {
-		return &ProposedData{}
-	})
-
-	eh.RegisterEventData(SyncStarted, func() eh.EventData {
-		return &SyncStartedData{}
+	eh.RegisterEventData(ConsentRequestRegistered, func() eh.EventData {
+		return &RequestData{}
 	})
 }
 

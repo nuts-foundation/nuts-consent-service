@@ -4,8 +4,6 @@ import (
 	"context"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
-	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
-	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"log"
 )
 
@@ -26,27 +24,27 @@ func (s UniquenessSaga) SagaType() saga.Type {
 func (s *UniquenessSaga) RunSaga(ctx context.Context, event eh.Event) []eh.Command {
 	log.Printf("[UniquenessSaga] event: %+v\n", event)
 	switch event.EventType() {
-	case events.Proposed:
-		data, ok := event.Data().(events.ProposedData)
-		if ok {
-			id := data.CustodianID + data.SubjectID + data.ActorID
-			log.Printf("[UniquenessSaga] checking duplicates for: %v\n", id)
-			for _, existingId := range s.existingIds {
-				log.Printf("[UniquenessSaga] against known id: %v\n", existingId)
-				if id == existingId {
-					log.Println("[UniquenessSaga] duplicate found!")
-					return []eh.Command{&commands.Cancel{
-						ID:     event.AggregateID(),
-						Reason: "duplicate consent",
-					}}
-				}
-			}
-			s.existingIds = append(s.existingIds, id)
-			return []eh.Command{&commands.MarkAsUnique{
-				ID: event.AggregateID(),
-			}}
-		}
-
+	//case events.Proposed:
+	//	data, ok := event.Data().(events.ProposedData)
+	//	if ok {
+	//		id := data.CustodianID + data.SubjectID + data.ActorID
+	//		log.Printf("[UniquenessSaga] checking duplicates for: %v\n", id)
+	//		for _, existingId := range s.existingIds {
+	//			log.Printf("[UniquenessSaga] against known id: %v\n", existingId)
+	//			if id == existingId {
+	//				log.Println("[UniquenessSaga] duplicate found!")
+	//				return []eh.Command{&commands.Cancel{
+	//					ID:     event.AggregateID(),
+	//					Reason: "duplicate consent",
+	//				}}
+	//			}
+	//		}
+	//		s.existingIds = append(s.existingIds, id)
+	//		return []eh.Command{&commands.MarkAsUnique{
+	//			ID: event.AggregateID(),
+	//		}}
+	//	}
+	default:
 	}
 	return nil
 }

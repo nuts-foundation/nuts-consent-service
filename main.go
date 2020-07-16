@@ -9,15 +9,12 @@ import (
 	"github.com/looplab/eventhorizon/commandhandler/bus"
 	"github.com/looplab/eventhorizon/eventbus/local"
 	projector2 "github.com/looplab/eventhorizon/eventhandler/projector"
-	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"github.com/looplab/eventhorizon/eventstore/memory"
 	memory2 "github.com/looplab/eventhorizon/repo/memory"
 	"github.com/looplab/eventhorizon/repo/version"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
-	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
-	"github.com/nuts-foundation/nuts-consent-service/domain/sagas"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	"log"
@@ -51,26 +48,26 @@ func main() {
 
 	//consentCommandHandler = eh.UseCommandHandlerMiddleware(consentCommandHandler, eventLogger.CommandLogger)
 	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
-	commandBus.SetHandler(consentCommandHandler, commands.ProposeCmdType)
-	commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
-	commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
-	commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)
-	commandBus.SetHandler(consentCommandHandler, commands.StartSyncCmdType)
-	commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
+	commandBus.SetHandler(consentCommandHandler, commands.RegisterConsentCmdType)
+	//commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
+	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
+	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)
+	//commandBus.SetHandler(consentCommandHandler, commands.StartSyncCmdType)
+	//commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
 
-	uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
-	eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
+	//uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
+	//eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
 
 	negotiationRepo := version.NewRepo(memory2.NewRepo())
 	projector := projector2.NewEventHandler(&consent.SyncProjector{}, negotiationRepo)
 	projector.SetEntityFactory(func() eh.Entity { return &consent.ConsentNegotiation{} })
 	eventbus.AddHandler(eh.MatchAny(), projector)
 
-	syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
-	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
+	//syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
+	//eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
 
-	checkPartiesSaga := saga.NewEventHandler(sagas.CheckPartiesSaga{}, commandBus)
-	eventbus.AddHandler(eh.MatchAnyEventOf(events2.Proposed), checkPartiesSaga)
+	//checkPartiesSaga := saga.NewEventHandler(sagas.CheckPartiesSaga{}, commandBus)
+	//eventbus.AddHandler(eh.MatchAnyEventOf(events2.Proposed), checkPartiesSaga)
 
 	id := uuid.New()
 
@@ -80,7 +77,7 @@ func main() {
 	keyID := types.KeyForEntity(types.LegalEntity{custodianID})
 	crypto.GenerateKeyPair(keyID)
 
-	proposeConsentCmd := &commands.Propose{
+	proposeConsentCmd := &commands.RegisterConsent{
 		ID:          id,
 		CustodianID: custodianID,
 		SubjectID:   "bsn:999",

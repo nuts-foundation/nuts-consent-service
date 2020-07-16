@@ -37,31 +37,23 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 			nil,
 			domain.ErrUnknownCommand,
 		},
-		"propose consent": {
+		"register consent": {
 			&ConsentAggregate{
 				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
-			&commands.Propose{
+			&commands.RegisterConsent{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
-			}, []eh.Event{eh.NewEventForAggregate(events2.Proposed, events2.ProposedData{
+			}, []eh.Event{eh.NewEventForAggregate(events2.ConsentRequestRegistered, events2.RequestData{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
 			}, TimeNow(), domain.ConsentAggregateType, id, 1)}, nil,
-		},
-		"any command when cancelled": {
-			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
-				State:         ConsentRequestCanceled,
-			}, &mocks.Command{ID: id},
-			nil,
-			domain.ErrAggregateCancelled,
 		},
 	}
 
