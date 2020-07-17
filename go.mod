@@ -8,4 +8,5 @@ require (
 	github.com/looplab/eventhorizon v0.6.0
 	github.com/nuts-foundation/nuts-consent-logic v0.14.0
 	github.com/nuts-foundation/nuts-crypto v0.14.0
+	github.com/nuts-foundation/nuts-fhir-validation v0.14.0
 )

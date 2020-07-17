@@ -22,6 +22,7 @@ const ConsentProgressManagerType = saga.Type("consentProgressManager")
 // It sits between the consent aggregate and the treatment relation aggregate.
 // This process manager decouples the two aggregates.
 type ConsentProgressManager struct {
+	FactBuilder consent_utils.ConsentFactBuilder
 }
 
 func (c ConsentProgressManager) SagaType() saga.Type {
@@ -77,12 +78,10 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 		if !ok {
 			log.Println("[ConsentProsessManager] could not cast data from ReservationAccepted event")
 		}
-		utils := consent_utils.ConsentUtils{}
-
-		var fhirConsent string
+		var consentFact []byte
 		var err error
 
-		if fhirConsent, err = utils.CreateFhirConsentResource(data); err != nil {
+		if consentFact, err = c.FactBuilder.BuildFact(data); err != nil {
 			return []eh.Command{
 				&consentCommands.RejectConsentRequest{
 					ID:     data.ID,
@@ -90,7 +89,16 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 				},
 			}
 		}
-		log.Printf("[ConsentProsessManager] FHIR resource created: %s\n", fhirConsent)
+		log.Printf("[ConsentProsessManager] FHIR resource created: %s\n", consentFact)
+		if validationResult, err := c.FactBuilder.VerifyFact(consentFact); !validationResult || err != nil {
+			return []eh.Command{
+				&consentCommands.RejectConsentRequest{
+					ID: data.ID,
+					Reason: fmt.Sprintf("the generated FHIR consent resource is invalid: %w", err),
+				},
+			}
+		}
+		log.Printf("FHIR resource is valid")
 	}
 
 	return nil

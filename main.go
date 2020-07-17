@@ -10,6 +10,7 @@ import (
 	"github.com/looplab/eventhorizon/eventbus/local"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
 	"github.com/looplab/eventhorizon/eventstore/memory"
+	consent_utils "github.com/nuts-foundation/nuts-consent-service/consent-utils"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
@@ -76,7 +77,7 @@ func main() {
 	//commandBus.SetHandler(consentCommandHandler, commands.StartSyncCmdType)
 	//commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
 
-	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{}, commandBus)
+	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{FactBuilder: consent_utils.FhirConsentFact{}}, commandBus)
 	eventbus.AddHandler(eh.MatchAnyEventOf(events2.ConsentRequestRegistered, events2.ReservationAccepted), consentProgressManager)
 	//uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
 	//eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)

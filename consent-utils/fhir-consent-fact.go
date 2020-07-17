@@ -6,17 +6,26 @@ import (
 	"github.com/cbroglie/mustache"
 	"github.com/nuts-foundation/nuts-consent-logic/pkg"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
+	nutsFhirValidation "github.com/nuts-foundation/nuts-fhir-validation/pkg"
 	"regexp"
 	"strings"
 	"time"
 )
 
-type ConsentUtils struct {
+type FhirConsentFact struct {
 
 }
 
+func (cl FhirConsentFact) BuildFact(consentData events.ConsentData) ([]byte, error) {
+	fact, err := cl.CreateFhirConsentResource(consentData)
+	return []byte(fact), err
+}
 
-func (cl ConsentUtils) CreateFhirConsentResource(data events.ConsentData) (string, error) {
+func (cl FhirConsentFact) VerifyFact(fact []byte) (bool, error) {
+	return cl.ValidateFhirConsentResource(string(fact))
+}
+
+func (cl FhirConsentFact) CreateFhirConsentResource(data events.ConsentData) (string, error) {
 
 	var (
 		actorAgbs []string
@@ -85,7 +94,7 @@ func (cl ConsentUtils) CreateFhirConsentResource(data events.ConsentData) (strin
 	return cleanupJSON(res)
 }
 // getVersionID returns the correct version number for the given record. "1" for a new record and "old + 1" for an update
-func (cl ConsentUtils) getVersionID(data events.ConsentData) (uint, error) {
+func (cl FhirConsentFact) getVersionID(data events.ConsentData) (uint, error) {
 	// FIXME: fetch version from another readmodel than the consentstore
 	//if record.PreviousRecordhash == nil {
 	//	return 1, nil
@@ -141,4 +150,15 @@ func cleanupJSON(value string) (string, error) {
 		return "", err
 	}
 	return string(cleanValue), nil
+}
+
+func (cl FhirConsentFact) ValidateFhirConsentResource(consentResource string) (bool, error) {
+	validationClient := nutsFhirValidation.NewValidatorClient()
+
+	valid, errors, err := validationClient.ValidateAgainstSchema([]byte(consentResource))
+	if !valid {
+		fmt.Println(errors, err)
+		fmt.Print(consentResource)
+	}
+	return valid, err
 }
