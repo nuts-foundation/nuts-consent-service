@@ -15,6 +15,8 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation"
+	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	process_managers "github.com/nuts-foundation/nuts-consent-service/domain/process-managers"
 	treatment_relation "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation"
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
@@ -23,7 +25,6 @@ import (
 	"log"
 	"time"
 )
-
 
 func init() {
 	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
@@ -55,44 +56,35 @@ func main() {
 	}
 
 	consentCommandHandler, err := aggregate.NewCommandHandler(domain.ConsentAggregateType, aggregateStore)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	treatmentCommandHander, err := aggregate.NewCommandHandler(domain.TreatmentRelationAggregateType, aggregateStore)
+	negotiationCommandHandler, err := aggregate.NewCommandHandler(domain.ConsentNegotiationAggregateType, aggregateStore)
 
 	//negotiationCommandHandler, err := aggregate.NewCommandHandler(negotiation.ConsentNegotiationAggregateType, aggregateStore)
 	//if err != nil {
 	//	log.Fatal(err)
 	//}
 
-	//consentCommandHandler = eh.UseCommandHandlerMiddleware(consentCommandHandler, eventLogger.CommandLogger)
-	//negotiationCommandHandler = eh.UseCommandHandlerMiddleware(negotiationCommandHandler, eventLogger.CommandLogger)
+	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
+		return &negotiation.NegotiationAggregate{
+			AggregateBase: events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
+			FactBuilder:   consent_utils.FhirConsentFact{},
+		}
+	})
+
 	commandBus.SetHandler(consentCommandHandler, consentCommands.RegisterConsentCmdType)
 	commandBus.SetHandler(treatmentCommandHander, treatmentRelationCommands.ReserveConsentCmdType)
 	commandBus.SetHandler(consentCommandHandler, consentCommands.RejectConsentCmdType)
-	//commandBus.SetHandler(consentCommandHandler, commands.CancelCmdType)
-	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsErroredCmdType)
-	//commandBus.SetHandler(consentCommandHandler, commands.MarkAsUniqueCmdType)
-	//commandBus.SetHandler(consentCommandHandler, commands.StartSyncCmdType)
-	//commandBus.SetHandler(consentCommandHandler, commands.MarkCustodianCheckedCmdType)
+	commandBus.SetHandler(negotiationCommandHandler, commands.PrepareNegotiationCmdType)
+	commandBus.SetHandler(negotiationCommandHandler, commands.ProposeConsentFactCmdType)
 
-	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{FactBuilder: consent_utils.FhirConsentFact{}}, commandBus)
-	eventbus.AddHandler(eh.MatchAnyEventOf(events2.ConsentRequestRegistered, events2.ReservationAccepted), consentProgressManager)
-	//uniquenessSaga := saga.NewEventHandler(sagas.NewUniquenessSaga(), commandBus)
-	//eventbus.AddHandler(eh.MatchEvent(events2.Proposed), uniquenessSaga)
+	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{}, commandBus)
+	eventbus.AddHandler(eh.MatchAnyEventOf(
+		events2.ConsentRequestRegistered,
+		events2.ReservationAccepted,
+		events2.NegotiationPrepared,
+	), consentProgressManager)
 
-	//negotiationRepo := version.NewRepo(memory2.NewRepo())
-	//projector := projector2.NewEventHandler(&consent.SyncProjector{}, negotiationRepo)
-	//projector.SetEntityFactory(func() eh.Entity { return &consent.ConsentNegotiation{} })
-	//eventbus.AddHandler(eh.MatchAny(), projector)
-
-	//syncSaga := saga.NewEventHandler(sagas.SyncSaga{NegotiationRepo: negotiationRepo}, commandBus)
-	//eventbus.AddHandler(eh.MatchAnyEventOf(events2.Unique), syncSaga)
-
-	//checkPartiesSaga := saga.NewEventHandler(sagas.CheckPartiesSaga{}, commandBus)
-	//eventbus.AddHandler(eh.MatchAnyEventOf(events2.Proposed), checkPartiesSaga)
-
+	// And now run an basic consent request:
 	id := uuid.New()
 
 	// make sure the custodian has a keypair in the truststore

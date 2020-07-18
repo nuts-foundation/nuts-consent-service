@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/saga"
-	consent_utils "github.com/nuts-foundation/nuts-consent-service/consent-utils"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
+	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
 	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
@@ -22,7 +22,7 @@ const ConsentProgressManagerType = saga.Type("consentProgressManager")
 // It sits between the consent aggregate and the treatment relation aggregate.
 // This process manager decouples the two aggregates.
 type ConsentProgressManager struct {
-	FactBuilder consent_utils.ConsentFactBuilder
+	//FactBuilder consent_utils.ConsentFactBuilder
 }
 
 func (c ConsentProgressManager) SagaType() saga.Type {
@@ -78,27 +78,23 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 		if !ok {
 			log.Println("[ConsentProsessManager] could not cast data from ReservationAccepted event")
 		}
-		var consentFact []byte
-		var err error
+		return []eh.Command{
+			&commands.PrepareNegotiation{
+				ID:          uuid.New(),
+				ConsentData: data,
+			},
+		}
+	case events.NegotiationPrepared:
+		//data, ok := event.Data().(events.NegotiationData)
+		//if !ok {
+		//	log.Println("[ConsentProsessManager] could not cast data from NegotiationPrepared event")
+		//}
 
-		if consentFact, err = c.FactBuilder.BuildFact(data); err != nil {
-			return []eh.Command{
-				&consentCommands.RejectConsentRequest{
-					ID:     data.ID,
-					Reason: fmt.Sprintf("[ConsentProsessManager] could not create the FHIR consent resource: %w", err),
-				},
-			}
+		return []eh.Command{
+			&commands.ProposeConsent{
+				ID: event.AggregateID(),
+			},
 		}
-		log.Printf("[ConsentProsessManager] FHIR resource created: %s\n", consentFact)
-		if validationResult, err := c.FactBuilder.VerifyFact(consentFact); !validationResult || err != nil {
-			return []eh.Command{
-				&consentCommands.RejectConsentRequest{
-					ID: data.ID,
-					Reason: fmt.Sprintf("the generated FHIR consent resource is invalid: %w", err),
-				},
-			}
-		}
-		log.Printf("FHIR resource is valid")
 	}
 
 	return nil

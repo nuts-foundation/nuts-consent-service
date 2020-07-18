@@ -3,26 +3,20 @@ package negotiation
 import (
 	"context"
 	"fmt"
-	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
+	consent_utils "github.com/nuts-foundation/nuts-consent-service/consent-utils"
+	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
+	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
+	"github.com/nuts-foundation/nuts-crypto/pkg/types"
+	"log"
+	"time"
 )
-
-const ConsentNegotiationAggregateType = eh.AggregateType("consent-negotiation")
-
-func init() {
-	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
-		return &NegotiationAggregate{
-			AggregateBase: events.NewAggregateBase(ConsentNegotiationAggregateType, id),
-		}
-	})
-}
 
 type NegotiationAggregate struct {
 	*events.AggregateBase
-	Contents string
-
-	State string
+	FactBuilder consent_utils.ConsentFactBuilder
 }
 
 type PartyRole string
@@ -43,8 +37,43 @@ type VendorResponse struct {
 	Signed bool
 }
 
-func (n NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
+func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
 	fmt.Printf("[NegotiationAggregate] command: %+v\n", command)
+	switch cmd := command.(type) {
+	case *commands.PrepareNegotiation:
+		var consentFact []byte
+		var err error
+
+		data := cmd.ConsentData
+
+		// Construct the fact
+		if consentFact, err = na.FactBuilder.BuildFact(data); err != nil {
+			na.StoreEvent(events2.ConsentRequestFailed, events2.FailedData{
+				Reason: fmt.Sprintf("Could not build the ConsentFact: %w", err),
+			}, time.Now())
+		}
+		log.Printf("[NegotiationAggregate] ConsentFact created: %s\n", consentFact)
+
+		// Validate the resulting fact
+		if validationResult, err := na.FactBuilder.VerifyFact(consentFact); !validationResult || err != nil {
+			na.StoreEvent(events2.ConsentRequestFailed, events2.FailedData{
+				Reason: fmt.Sprintf("Could not validate the ConsentFact: %w", err),
+			}, time.Now())
+		}
+		log.Printf("[NegotiationAggregate] ConsentFact is valid")
+
+		// Create the externalID for the combination subject, custodian and actor.
+		cryptoClient := nutsCryto.NewCryptoClient()
+		legalEntity := types.LegalEntity{URI: data.CustodianID}
+		entityKey := types.KeyForEntity(legalEntity)
+		externalID, err := cryptoClient.CalculateExternalId(data.SubjectID, data.ActorID, entityKey)
+
+		na.StoreEvent(events2.NegotiationPrepared, events2.NegotiationData{
+			ConsentID:   externalID,
+			ConsentFact: consentFact,
+		}, time.Now())
+
+	}
 	return nil
 }
 
