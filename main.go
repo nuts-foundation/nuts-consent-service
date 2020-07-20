@@ -22,7 +22,13 @@ import (
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
+	"github.com/nuts-foundation/nuts-event-octopus/client"
+	"github.com/nuts-foundation/nuts-event-octopus/engine"
+	core "github.com/nuts-foundation/nuts-go-core"
+	pkg2 "github.com/nuts-foundation/nuts-registry/pkg"
+	"github.com/spf13/cobra"
 	"log"
+	"os"
 	"time"
 )
 
@@ -64,10 +70,26 @@ func main() {
 	//	log.Fatal(err)
 	//}
 
+	//nutsConfig := core.NutsConfig()
+	eventOctopusEngine := engine.NewEventOctopusEngine()
+	if err := eventOctopusEngine.Configure(); err != nil {
+		panic(err)
+	}
+	if err := eventOctopusEngine.Start(); err != nil {
+		panic(err)
+	}
+
+	nutsEventOctopus := client.NewEventOctopusClient()
+	publisher, err := nutsEventOctopus.EventPublisher("consent-logic")
+	if err != nil {
+		log.Panicf("could not subscribe to event publisher: %w", err)
+	}
+
 	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
 		return &negotiation.NegotiationAggregate{
-			AggregateBase: events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
-			FactBuilder:   consent_utils.FhirConsentFact{},
+			AggregateBase:  events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
+			FactBuilder:    consent_utils.FhirConsentFact{},
+			EventPublisher: publisher,
 		}
 	})
 
@@ -89,9 +111,32 @@ func main() {
 
 	// make sure the custodian has a keypair in the truststore
 	crypto := pkg.NewCryptoClient()
-	custodianID := "agb:123"
+	custodianID := "urn:oid:2.16.840.1.113883.2.4.6.1:123"
+	actorID := "urn:oid:2.16.840.1.113883.2.4.6.1:456"
 	keyID := types.KeyForEntity(types.LegalEntity{custodianID})
 	crypto.GenerateKeyPair(keyID)
+
+	os.Setenv("NUTS_IDENTITY", "oid:123")
+	core.NutsConfig().Load(&cobra.Command{})
+	registryPath := "./registry"
+	r := pkg2.RegistryInstance()
+	r.Config.Mode = "server"
+	r.Config.Datadir = registryPath
+	r.Config.SyncMode = "fs"
+	r.Config.OrganisationCertificateValidity = 1
+	r.Config.VendorCACertificateValidity = 1
+	if err := r.Configure(); err != nil {
+		panic(err)
+	}
+
+	// Register a vendor
+	_, _ = r.RegisterVendor("Test Vendor", "healthcare")
+
+	// Add Organization to registry
+	orgName := "Zorggroep Nuts"
+	if _, err := r.VendorClaim(actorID, orgName, nil); err != nil {
+		//panic(err)
+	}
 
 	proposeConsentCmd := &consentCommands.RegisterConsent{
 		ID:          id,

@@ -2,21 +2,29 @@ package negotiation
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
-	consent_utils "github.com/nuts-foundation/nuts-consent-service/consent-utils"
-	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	consentutils "github.com/nuts-foundation/nuts-consent-service/consent-utils"
+	"github.com/nuts-foundation/nuts-consent-service/domain"
+	domainEvents "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
+	eventOctopus"github.com/nuts-foundation/nuts-event-octopus/pkg"
 	"log"
 	"time"
 )
 
 type NegotiationAggregate struct {
 	*events.AggregateBase
-	FactBuilder consent_utils.ConsentFactBuilder
+	FactBuilder consentutils.ConsentFactBuilder
+	EventPublisher   eventOctopus.IEventPublisher
+
+	ConsentID []byte
+	ConsentFact []byte
 }
 
 type PartyRole string
@@ -38,7 +46,7 @@ type VendorResponse struct {
 }
 
 func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
-	fmt.Printf("[NegotiationAggregate] command: %+v\n", command)
+	log.Printf("[NegotiationAggregate] command: %+v\n", command)
 	switch cmd := command.(type) {
 	case *commands.PrepareNegotiation:
 		var consentFact []byte
@@ -48,7 +56,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 
 		// Construct the fact
 		if consentFact, err = na.FactBuilder.BuildFact(data); err != nil {
-			na.StoreEvent(events2.ConsentRequestFailed, events2.FailedData{
+			na.StoreEvent(domainEvents.ConsentRequestFailed, domainEvents.FailedData{
 				Reason: fmt.Sprintf("Could not build the ConsentFact: %w", err),
 			}, time.Now())
 		}
@@ -56,7 +64,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 
 		// Validate the resulting fact
 		if validationResult, err := na.FactBuilder.VerifyFact(consentFact); !validationResult || err != nil {
-			na.StoreEvent(events2.ConsentRequestFailed, events2.FailedData{
+			na.StoreEvent(domainEvents.ConsentRequestFailed, domainEvents.FailedData{
 				Reason: fmt.Sprintf("Could not validate the ConsentFact: %w", err),
 			}, time.Now())
 		}
@@ -68,16 +76,49 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 		entityKey := types.KeyForEntity(legalEntity)
 		externalID, err := cryptoClient.CalculateExternalId(data.SubjectID, data.ActorID, entityKey)
 
-		na.StoreEvent(events2.NegotiationPrepared, events2.NegotiationData{
+		na.StoreEvent(domainEvents.NegotiationPrepared, domainEvents.NegotiationData{
 			ConsentID:   externalID,
 			ConsentFact: consentFact,
 		}, time.Now())
+	case *commands.ProposeConsent:
+		log.Printf("[NegotiationAggregate]: Propose consent for ID: %s", na.ConsentID)
 
+		channel := consentutils.CordaChannel{}
+		consentFact := consentutils.ConsentFact{Payload: na.ConsentFact}
+		state, err := channel.BuildFullConsentRequestState(na.EntityID(), na.ConsentID, consentFact)
+		if err != nil {
+			return fmt.Errorf("could not sync consent proposal: %w", err)
+		}
+
+		sjs, err := json.Marshal(state)
+		if err != nil {
+			return fmt.Errorf("failed to marshall NewConsentRequest to json: %v", err)
+		}
+		bsjs := base64.StdEncoding.EncodeToString(sjs)
+		cordaBridgeEvent := eventOctopus.Event{
+			UUID:                 na.EntityID().String(),
+			Name:                 eventOctopus.EventConsentRequestConstructed,
+			InitiatorLegalEntity: consentFact.Custodian(),
+			RetryCount:           0,
+			ExternalID:           string(na.ConsentID),
+			Payload:              bsjs,
+		}
+
+		return na.EventPublisher.Publish(eventOctopus.ChannelConsentRequest, cordaBridgeEvent)
 	}
 	return nil
 }
 
-func (n NegotiationAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
-	fmt.Printf("[NegotiationAggregate] event: %+v\n", event)
+func (na *NegotiationAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
+	log.Printf("[NegotiationAggregate] event: %+v\n", event)
+	switch event.EventType() {
+	case domainEvents.NegotiationPrepared:
+		if data, ok := event.Data().(domainEvents.NegotiationData); ok {
+			na.ConsentID = data.ConsentID
+			na.ConsentFact = data.ConsentFact
+		} else {
+			return fmt.Errorf("could not apply event: %w", domain.ErrInvalidEventData)
+		}
+	}
 	return nil
 }
