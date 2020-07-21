@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/cbroglie/mustache"
-	"github.com/nuts-foundation/nuts-consent-logic/pkg"
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
+	//"github.com/nuts-foundation/nuts-consent-service/pkg"
 	nutsFhirValidation "github.com/nuts-foundation/nuts-fhir-validation/pkg"
 	"regexp"
 	"strings"
@@ -114,30 +114,30 @@ func valueFromUrn(urn string) string {
 	return segments[len(segments)-1]
 }
 
-func derefPointers(docReference *pkg.DocumentReference) map[string]interface{} {
-	m := map[string]interface{}{}
-
-	if docReference == nil {
-		return nil
-	}
-
-	m["Title"] = docReference.Title
-	m["ID"] = docReference.ID
-
-	if docReference.Hash != nil {
-		m["Hash"] = *docReference.Hash
-	}
-
-	if docReference.ContentType != nil {
-		m["ContentType"] = *docReference.ContentType
-	}
-
-	if docReference.URL != nil {
-		m["URL"] = *docReference.URL
-	}
-
-	return m
-}
+//func derefPointers(docReference *pkg.DocumentReference) map[string]interface{} {
+//	m := map[string]interface{}{}
+//
+//	if docReference == nil {
+//		return nil
+//	}
+//
+//	m["Title"] = docReference.Title
+//	m["ID"] = docReference.ID
+//
+//	if docReference.Hash != nil {
+//		m["Hash"] = *docReference.Hash
+//	}
+//
+//	if docReference.ContentType != nil {
+//		m["ContentType"] = *docReference.ContentType
+//	}
+//
+//	if docReference.URL != nil {
+//		m["URL"] = *docReference.URL
+//	}
+//
+//	return m
+//}
 
 // clean up the json hash
 func cleanupJSON(value string) (string, error) {
