@@ -8,6 +8,7 @@ import (
 	engine2 "github.com/nuts-foundation/nuts-consent-service/engine"
 	pkg2 "github.com/nuts-foundation/nuts-consent-service/pkg"
 	engine3 "github.com/nuts-foundation/nuts-consent-store/engine"
+	engine5 "github.com/nuts-foundation/nuts-crypto/engine"
 	engine4 "github.com/nuts-foundation/nuts-event-octopus/engine"
 	core "github.com/nuts-foundation/nuts-go-core"
 	"github.com/nuts-foundation/nuts-registry/engine"
@@ -63,6 +64,9 @@ func Execute() {
 
 	eventOctopusEngine := engine4.NewEventOctopusEngine()
 	nutsConfig.RegisterFlags(rootCommand, eventOctopusEngine)
+
+	cryptoEngine := engine5.NewCryptoEngine()
+	nutsConfig.RegisterFlags(rootCommand, cryptoEngine)
 
 	if err := nutsConfig.Load(rootCommand); err != nil {
 		panic(err)
