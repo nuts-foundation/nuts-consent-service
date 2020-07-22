@@ -8,7 +8,7 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
-	"log"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	"time"
 )
 
@@ -22,7 +22,7 @@ type ConsentAggregate struct {
 }
 
 func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
-	log.Printf("[ConsentAggregate] command: %v, %+v\n", command.CommandType(), command)
+	logger.Logger().Debugf("[ConsentAggregate] command: %v, %+v\n", command.CommandType(), command)
 
 	switch cmd := command.(type) {
 	case *commands.RegisterConsent:
@@ -42,7 +42,7 @@ func (c *ConsentAggregate) HandleCommand(ctx context.Context, command eh.Command
 }
 
 func (c *ConsentAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
-	log.Printf("[ConsentAggregate] event: %+v\n", event)
+	logger.Logger().Debugf("[ConsentAggregate] event: %+v\n", event)
 	switch event.EventType() {
 	default:
 

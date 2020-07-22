@@ -11,9 +11,9 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
-	"log"
 )
 
 const ConsentProgressManagerType = saga.Type("consentProgressManager")
@@ -30,7 +30,7 @@ func (c ConsentProgressManager) SagaType() saga.Type {
 }
 
 func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []eh.Command {
-	log.Printf("[ConsentProsessManager] event: %+v\n", event)
+	logger.Logger().Tracef("[ConsentProsessManager] event: %+v\n", event)
 	switch event.EventType() {
 	case events.ConsentRequestRegistered:
 		data, ok := event.Data().(events.ConsentData)
@@ -76,7 +76,7 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 	case events.ReservationAccepted:
 		data, ok := event.Data().(events.ConsentData)
 		if !ok {
-			log.Println("[ConsentProsessManager] could not cast data from ReservationAccepted event")
+			logger.Logger().Tracef("[ConsentProsessManager] could not cast data from ReservationAccepted event")
 		}
 		return []eh.Command{
 			&commands.PrepareNegotiation{
@@ -87,7 +87,7 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 	case events.NegotiationPrepared:
 		//data, ok := event.Data().(events.NegotiationData)
 		//if !ok {
-		//	log.Println("[ConsentProsessManager] could not cast data from NegotiationPrepared event")
+		//	pkg.Logger().Tracef("[ConsentProsessManager] could not cast data from NegotiationPrepared event")
 		//}
 
 		return []eh.Command{

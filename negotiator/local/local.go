@@ -2,7 +2,7 @@ package local
 
 import (
 	"github.com/google/uuid"
-	"log"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 )
 
 type LocalNegotiator struct {
@@ -10,6 +10,6 @@ type LocalNegotiator struct {
 
 func (l LocalNegotiator) Start(parties []string, contents string) (uuid.UUID, error) {
 	id := uuid.New()
-	log.Printf("sync started with id: %s\n", id)
+	logger.Logger().Debugf("sync started with id: %s\n", id)
 	return id, nil
 }

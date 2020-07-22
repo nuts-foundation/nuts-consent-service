@@ -11,10 +11,10 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	domainEvents "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
-	eventOctopus"github.com/nuts-foundation/nuts-event-octopus/pkg"
-	"log"
+	eventOctopus "github.com/nuts-foundation/nuts-event-octopus/pkg"
 	"time"
 )
 
@@ -46,7 +46,7 @@ type VendorResponse struct {
 }
 
 func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
-	log.Printf("[NegotiationAggregate] command: %+v\n", command)
+	logger.Logger().Tracef("[NegotiationAggregate] command: %+v\n", command)
 	switch cmd := command.(type) {
 	case *commands.PrepareNegotiation:
 		var consentFact []byte
@@ -60,7 +60,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 				Reason: fmt.Sprintf("Could not build the ConsentFact: %w", err),
 			}, time.Now())
 		}
-		log.Printf("[NegotiationAggregate] ConsentFact created: %s\n", consentFact)
+		logger.Logger().Tracef("[NegotiationAggregate] ConsentFact created: %s\n", consentFact)
 
 		// Validate the resulting fact
 		if validationResult, err := na.FactBuilder.VerifyFact(consentFact); !validationResult || err != nil {
@@ -68,7 +68,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 				Reason: fmt.Sprintf("Could not validate the ConsentFact: %w", err),
 			}, time.Now())
 		}
-		log.Printf("[NegotiationAggregate] ConsentFact is valid")
+		logger.Logger().Tracef("[NegotiationAggregate] ConsentFact is valid")
 
 		// Create the externalID for the combination subject, custodian and actor.
 		cryptoClient := nutsCryto.NewCryptoClient()
@@ -81,7 +81,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 			ConsentFact: consentFact,
 		}, time.Now())
 	case *commands.ProposeConsent:
-		log.Printf("[NegotiationAggregate]: Propose consent for ID: %s", na.ConsentID)
+		logger.Logger().Tracef("[NegotiationAggregate]: Propose consent for ID: %s", na.ConsentID)
 
 		channel := consentutils.CordaChannel{}
 		consentFact := consentutils.ConsentFact{Payload: na.ConsentFact}
@@ -110,7 +110,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 }
 
 func (na *NegotiationAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
-	log.Printf("[NegotiationAggregate] event: %+v\n", event)
+	logger.Logger().Tracef("[NegotiationAggregate] event: %+v\n", event)
 	switch event.EventType() {
 	case domainEvents.NegotiationPrepared:
 		if data, ok := event.Data().(domainEvents.NegotiationData); ok {

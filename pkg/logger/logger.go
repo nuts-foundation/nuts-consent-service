@@ -1,4 +1,4 @@
-package pkg
+package logger
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func logger() *logrus.Entry {
+func Logger() *logrus.Entry {
 	return logrus.StandardLogger().WithField("module", "consent-service")
 }
 
@@ -17,13 +17,13 @@ func (e EventLogger) HandlerType() eh.EventHandlerType {
 }
 
 func (e EventLogger) HandleEvent(ctx context.Context, event eh.Event) error {
-	logger().Debugf("[Eventlogger]: %+v \n", event)
+	Logger().Debugf("[Eventlogger]: %+v \n", event)
 	return nil
 }
 
 func (e EventLogger) CommandLogger(h eh.CommandHandler) eh.CommandHandler {
 	return eh.CommandHandlerFunc(func(ctx context.Context, command eh.Command) error {
-		logger().Debugf("CMD %#v", command)
+		Logger().Debugf("CMD %#v", command)
 		return h.HandleCommand(ctx, command)
 	})
 }

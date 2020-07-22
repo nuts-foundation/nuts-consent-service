@@ -20,6 +20,7 @@ import (
 	process_managers "github.com/nuts-foundation/nuts-consent-service/domain/process-managers"
 	treatment_relation "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation"
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	nutsConsentStoreClient "github.com/nuts-foundation/nuts-consent-store/client"
 	nutsConsentStorePkg "github.com/nuts-foundation/nuts-consent-store/pkg"
 	nutsCryptoPkg "github.com/nuts-foundation/nuts-crypto/pkg"
@@ -100,7 +101,7 @@ func (cl *ConsentService) Start() error {
 	}
 	publisher, err := cl.NutsEventOctopus.EventPublisher("consent-service")
 	if err != nil {
-		logger().WithError(err).Panic("Could not subscribe to event publisher")
+		logger.Logger().WithError(err).Panic("Could not subscribe to event publisher")
 	}
 	cl.EventPublisher = publisher
 
@@ -127,7 +128,7 @@ func (cl *ConsentService) Start() error {
 	commandBus := bus.NewCommandHandler()
 	cl.CommandBus = commandBus
 
-	eventLogger := &EventLogger{}
+	eventLogger := &logger.EventLogger{}
 	eventbus.AddObserver(eh.MatchAny(), eventLogger)
 
 	aggregateStore, err := events.NewAggregateStore(eventstore, eventbus)

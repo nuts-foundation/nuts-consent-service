@@ -8,7 +8,7 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	domainEvents "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
-	"log"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	"time"
 )
 
@@ -22,7 +22,7 @@ type TreatmentRelationAggregate struct {
 }
 
 func (t TreatmentRelationAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
-	log.Printf("[TreatmentRelationAggregate] command: %v, %+v\n", command.CommandType(), command)
+	logger.Logger().Debugf("[TreatmentRelationAggregate] command: %v, %+v\n", command.CommandType(), command)
 	switch cmd := command.(type) {
 	case *treatmentRelationCommands.ReserveConsent:
 		// TODO: check if there are no dupliates with other consents
@@ -42,7 +42,7 @@ func (t TreatmentRelationAggregate) HandleCommand(ctx context.Context, command e
 }
 
 func (t TreatmentRelationAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
-	log.Printf("[TreatmentRelationAggregate] event: %+v\n", event)
+	logger.Logger().Debugf("[TreatmentRelationAggregate] event: %+v\n", event)
 	switch event.EventType() {
 	default:
 

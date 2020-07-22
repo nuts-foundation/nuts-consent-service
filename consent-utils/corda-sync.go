@@ -6,10 +6,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/jwk"
 	bridgeClient "github.com/nuts-foundation/consent-bridge-go-client/api"
+	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	"github.com/nuts-foundation/nuts-registry/client"
-	"log"
 	"time"
 )
 
@@ -116,7 +116,7 @@ func encryptConsentFact(consentFact ConsentFact) (types.DoubleEncryptedCipherTex
 	registryClient := client.NewRegistryClient()
 	organization, err := registryClient.OrganizationById(consentFact.Actor())
 	if err != nil {
-		log.Printf("error while getting public key for actor: %v from registry: %v", consentFact.Actor(), err)
+		logger.Logger().Errorf("error while getting public key for actor: %v from registry: %v\n", consentFact.Actor(), err)
 		return types.DoubleEncryptedCipherText{}, err
 	}
 
@@ -132,7 +132,7 @@ func encryptConsentFact(consentFact ConsentFact) (types.DoubleEncryptedCipherTex
 	keyIdentifier := types.KeyForEntity(types.LegalEntity{URI: consentFact.Custodian()})
 	jwk, err = cryptoClient.GetPublicKeyAsJWK(keyIdentifier)
 	if err != nil {
-		log.Printf("error while getting public key for custodian: %v from crypto: %v", consentFact.Custodian(), err)
+		logger.Logger().Errorf("error while getting public key for custodian: %v from crypto: %v\n", consentFact.Custodian(), err)
 		return types.DoubleEncryptedCipherText{}, err
 	}
 	partyKeys = append(partyKeys, jwk)
