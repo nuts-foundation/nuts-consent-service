@@ -86,17 +86,23 @@ func Execute() {
 		panic(err)
 	}
 
+	if err := nutsConfig.InjectIntoEngine(cryptoEngine); err != nil {
 		panic(err)
 	}
 
-	if err := eventOctopusEngine.Configure(); err != nil {
 	if err := consentServiceEngine.Configure(); err != nil {
 		panic(err)
 	}
 
-	if err := eventOctopusEngine.Start(); err != nil {
+	if err := eventOctopusEngine.Configure(); err != nil {
 		panic(err)
 	}
+
+	// Do not start the octopus engine since it will create a nats server
+	// https://github.com/nuts-foundation/nuts-event-octopus/issues/47
+	//if err := eventOctopusEngine.Start(); err != nil {
+	//	panic(err)
+	//}
 
 	if err := registryEngine.Configure(); err != nil {
 		panic(err)
