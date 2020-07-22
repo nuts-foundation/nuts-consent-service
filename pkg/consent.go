@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"context"
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
@@ -29,6 +30,7 @@ import (
 	"github.com/nuts-foundation/nuts-registry/pkg"
 	"log"
 	"sync"
+	"time"
 )
 
 type ConsentServiceConfig struct {
@@ -46,11 +48,11 @@ type ConsentService struct {
 	NutsEventOctopus nutsEventOctopus.EventOctopusClient
 	Config           ConsentServiceConfig
 	EventPublisher   nutsEventOctopus.IEventPublisher
+	CommandBus       *bus.CommandHandler
 }
 
 var instance *ConsentService
 var oneEngine sync.Once
-
 
 func ConsentServiceInstance() *ConsentService {
 	oneEngine.Do(func() {
@@ -60,7 +62,23 @@ func ConsentServiceInstance() *ConsentService {
 }
 
 func (cl ConsentService) StartConsentFlow(request *CreateConsentRequest) (*uuid.UUID, error) {
-	panic("implement me")
+	end := time.Time{}
+	if pEnd := request.Records[0].Period.End; pEnd != nil {
+		end = *pEnd
+	}
+	uuid := uuid.New()
+	cmd := &consentCommands.RegisterConsent{
+		ID:          uuid,
+		CustodianID: string(request.Custodian),
+		SubjectID:   string(request.Subject),
+		ActorID:     string(request.Actor),
+		Class:       string(request.Records[0].DataClass[0]),
+		Start:       request.Records[0].Period.Start,
+		End:         end,
+	}
+	err := cl.CommandBus.HandleCommand(context.Background(), cmd)
+	return  &uuid, err
+
 }
 
 func (cl ConsentService) HandleIncomingCordaEvent(event *nutsEventOctopus.Event) {
@@ -80,7 +98,7 @@ func (cl *ConsentService) Start() error {
 	if core.NutsConfig().GetEngineMode("") != core.ServerEngineMode {
 		return nil
 	}
-	publisher, err := cl.NutsEventOctopus.EventPublisher("consent-logic")
+	publisher, err := cl.NutsEventOctopus.EventPublisher("consent-service")
 	if err != nil {
 		logger().WithError(err).Panic("Could not subscribe to event publisher")
 	}
@@ -107,6 +125,7 @@ func (cl *ConsentService) Start() error {
 	eventstore := memory.NewEventStore()
 	eventbus := local.NewEventBus(local.NewGroup())
 	commandBus := bus.NewCommandHandler()
+	cl.CommandBus = commandBus
 
 	eventLogger := &EventLogger{}
 	eventbus.AddObserver(eh.MatchAny(), eventLogger)
