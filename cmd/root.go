@@ -46,15 +46,15 @@ var (
 func Execute() {
 	nutsConfig := core.NutsConfig()
 
-	var consentLogicEngine = engine2.NewConsentServiceEngine()
+	var consentServiceEngine = engine2.NewConsentServiceEngine()
 
-	var rootCommand = consentLogicEngine.Cmd
+	var rootCommand = consentServiceEngine.Cmd
 	serveCommand.Flags().StringVar(&serverInterface, confInterface, "localhost", "Server interface binding")
 	serveCommand.Flags().IntVarP(&serverPort, confPort, "p", 1324, "Server listen port")
 	rootCommand.AddCommand(serveCommand)
 
-	nutsConfig.IgnoredPrefixes = append(nutsConfig.IgnoredPrefixes, consentLogicEngine.ConfigKey)
-	nutsConfig.RegisterFlags(rootCommand, consentLogicEngine)
+	nutsConfig.IgnoredPrefixes = append(nutsConfig.IgnoredPrefixes, consentServiceEngine.ConfigKey)
+	nutsConfig.RegisterFlags(rootCommand, consentServiceEngine)
 
 	registryEngine := engine.NewRegistryEngine()
 	nutsConfig.RegisterFlags(rootCommand, registryEngine)
@@ -74,7 +74,7 @@ func Execute() {
 
 	nutsConfig.PrintConfig(logrus.StandardLogger())
 
-	if err := nutsConfig.InjectIntoEngine(consentLogicEngine); err != nil {
+	if err := nutsConfig.InjectIntoEngine(consentServiceEngine); err != nil {
 		panic(err)
 	}
 
@@ -86,11 +86,11 @@ func Execute() {
 		panic(err)
 	}
 
-	if err := consentLogicEngine.Configure(); err != nil {
 		panic(err)
 	}
 
 	if err := eventOctopusEngine.Configure(); err != nil {
+	if err := consentServiceEngine.Configure(); err != nil {
 		panic(err)
 	}
 
@@ -102,7 +102,7 @@ func Execute() {
 		panic(err)
 	}
 
-	if err := consentLogicEngine.Start(); err != nil {
+	if err := consentServiceEngine.Start(); err != nil {
 		panic(err)
 	}
 
