@@ -43,7 +43,8 @@ func TestTreatmentRelationAggregate_HandleCommand(t *testing.T) {
 				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
 			&treatmentRelationCommands.ReserveConsent{
-				ID:          id,
+				ID:          uuid.New(),
+				ConsentID:   id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",

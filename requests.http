@@ -9,9 +9,9 @@ POST http://localhost:1324/api/consent
 Content-Type: application/json
 
 {
-  "subject": "urn:oid:2.16.840.1.113883.2.4.6.3:999999990",
-  "custodian": "urn:oid:2.16.840.1.113883.2.4.6.1:123456",
-  "actor": "urn:oid:2.16.840.1.113883.2.4.6.1:456123",
+  "subject": "urn:oid:2.16.840.1.113883.2.4.6.3:999999991",
+  "custodian": "urn:oid:2.16.840.1.113883.2.4.6.1:12345678",
+  "actor": "urn:oid:2.16.840.1.113883.2.4.6.1:43215678",
   "performer": "urn:oid:2.16.840.1.113883.2.4.6.1:00000007",
   "Records": [
     {

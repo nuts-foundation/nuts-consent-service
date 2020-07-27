@@ -25,9 +25,9 @@ func (t TreatmentRelationAggregate) HandleCommand(ctx context.Context, command e
 	logger.Logger().Debugf("[TreatmentRelationAggregate] command: %v, %+v\n", command.CommandType(), command)
 	switch cmd := command.(type) {
 	case *treatmentRelationCommands.ReserveConsent:
-		// TODO: check if there are no dupliates with other consents
+		// TODO: check if there are no duplicates with other consents
 		t.StoreEvent(domainEvents.ReservationAccepted, domainEvents.ConsentData{
-			ID:          cmd.ID,
+			ID:          cmd.ConsentID,
 			CustodianID: cmd.CustodianID,
 			SubjectID:   cmd.SubjectID,
 			ActorID:     cmd.ActorID,

@@ -53,7 +53,7 @@ func TestConsentProgressManager_RunSaga(t *testing.T) {
 			}},
 			nil,
 		},
-		"ConsentRegistered, known custodian will start sync": {
+		"ConsentRequestRegistered, will try to reserve the consent": {
 			ConsentProgressManager{},
 			eventhorizon.NewEventForAggregate(events.ConsentRequestRegistered, events.ConsentData{
 				ID:          consentID,
@@ -66,6 +66,7 @@ func TestConsentProgressManager_RunSaga(t *testing.T) {
 			}, time.Now(), domain.ConsentAggregateType, consentID, 1),
 			[]eventhorizon.Command{&commands2.ReserveConsent{
 				ID:          externalID,
+				ConsentID:   consentID,
 				CustodianID: knownCustodianID,
 				SubjectID:   "bsn:123",
 				ActorID:     "agb:456",

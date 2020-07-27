@@ -11,6 +11,7 @@ const ConsentRequestFailed = eh.EventType("consent:request-failed")
 const ReservationAccepted = eh.EventType("treatment-relation:consent-reservation-accepted")
 const ReservationRejected = eh.EventType("treatment-relation:consent-reservation-rejected")
 const NegotiationPrepared = eh.EventType("negotiation:prepared")
+const ConsentProposed = eh.EventType("negotiation:proposed")
 
 type ConsentData struct {
 	ID          uuid.UUID
@@ -23,7 +24,6 @@ type ConsentData struct {
 }
 
 type NegotiationData struct {
-	ConsentID []byte
 	ConsentFact []byte
 }
 

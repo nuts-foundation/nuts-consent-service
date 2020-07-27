@@ -1,164 +1,66 @@
 package consent_utils
 
 import (
-	"encoding/json"
+	"crypto/sha256"
 	"fmt"
-	"github.com/cbroglie/mustache"
-	"github.com/nuts-foundation/nuts-consent-service/domain/events"
-	//"github.com/nuts-foundation/nuts-consent-service/pkg"
 	nutsFhirValidation "github.com/nuts-foundation/nuts-fhir-validation/pkg"
-	"regexp"
-	"strings"
+	"github.com/thedevsaddam/gojsonq/v2"
 	"time"
 )
 
+// ConsentFactBuilder defines the interface a factbuilder for consents should implement.
+// A fact contains information about a process. In this case the consent given to a
+// custodian to exchange data with another actor.
+// This facts can be exchanged between the parties.
+// A fact can be represented in a known domain format like multiple versions of FHIR, or just JSON or a binary format.
 type FhirConsentFact struct {
-
+	payload []byte
 }
 
-func (cl FhirConsentFact) BuildFact(consentData events.ConsentData) ([]byte, error) {
-	fact, err := cl.CreateFhirConsentResource(consentData)
-	return []byte(fact), err
+func (c FhirConsentFact) ID() string {
+	jsonq := gojsonq.New().FromString(string(c.payload))
+	id, ok := jsonq.Copy().Find("id").(string)
+	if ok {
+		return id
+	}
+	return ""
 }
 
-func (cl FhirConsentFact) VerifyFact(fact []byte) (bool, error) {
-	return cl.ValidateFhirConsentResource(string(fact))
+func (c FhirConsentFact) Actor() string {
+	jsonq := gojsonq.New().FromString(string(c.payload))
+	identifier := nutsFhirValidation.ActorsFrom(jsonq)[0]
+	return string(identifier)
 }
 
-func (cl FhirConsentFact) CreateFhirConsentResource(data events.ConsentData) (string, error) {
-
-	var (
-		actorAgbs []string
-		err       error
-		versionID uint
-		res       string
-	)
-	actorAgbs = append(actorAgbs, valueFromUrn(data.ActorID))
-
-	if versionID, err = cl.getVersionID(data); versionID == 0 || err != nil {
-		err = fmt.Errorf("could not determine versionId: %w", err)
-		//logger().Error(err)
-		return "", err
-	}
-
-	// FIXME: the current class property is a string, and should be rewritten to an array
-	dataClasses := make([]map[string]string, 1)
-	viewModel := map[string]interface{}{
-		"subjectBsn":   valueFromUrn(data.SubjectID),
-		"actorAgbs":    actorAgbs,
-		"custodianAgb": valueFromUrn(data.CustodianID),
-		"period": map[string]string{
-			"Start": data.Start.Format(time.RFC3339),
-		},
-		"dataClass":   dataClasses,
-		"lastUpdated": time.Now().Format(time.RFC3339),
-		"versionId":   fmt.Sprintf("%d", versionID),
-	}
-
-	// split data class identifiers
-	for i, dc := range []string{data.Class} { // Fixme: rewrite the data.class to an array
-		dataClasses[i] = make(map[string]string)
-		sdc := string(dc)
-		li := strings.LastIndex(sdc, ":")
-		if li < 0 {
-			li = 0
-		}
-		dataClasses[i]["system"] = sdc[0:li]
-		dataClasses[i]["code"] = sdc[li+1:]
-	}
-
-	// Fixme: add proof to consentData
-	//if record.ConsentProof != nil {
-	//	viewModel["consentProof"] = derefPointers(record.ConsentProof)
-	//}
-
-	// Fixme: add performer to the consentData
-	//if performer != "" {
-	//	viewModel["performerId"] = valueFromUrn(string(performer))
-	//}
-
-	if !data.End.IsZero() {
-		(viewModel["period"].(map[string]string))["End"] = data.End.Format(time.RFC3339)
-	}
-
-	if res, err = mustache.Render(template, viewModel); err != nil {
-		// uh oh
-		return "", err
-	}
-
-	// filter out last comma out [{},{},] since mustache templates cannot handle this:
-	// https://stackoverflow.com/questions/6114435/in-mustache-templating-is-there-an-elegant-way-of-expressing-a-comma-separated-l
-	re := regexp.MustCompile(`\},(\s*)]`)
-	res = re.ReplaceAllString(res, `}$1]`)
-
-	return cleanupJSON(res)
-}
-// getVersionID returns the correct version number for the given record. "1" for a new record and "old + 1" for an update
-func (cl FhirConsentFact) getVersionID(data events.ConsentData) (uint, error) {
-	// FIXME: fetch version from another readmodel than the consentstore
-	//if record.PreviousRecordhash == nil {
-	//	return 1, nil
-	//}
-	//
-	//cr, err := cl.NutsConsentStore.FindConsentRecordByHash(context.TODO(), *record.PreviousRecordhash, true)
-	//if err != nil {
-	//	return 0, err
-	//}
-	//
-	//return cr.Version + 1, nil
-	return 1, nil
+func (c FhirConsentFact) Custodian() string {
+	jsonq := gojsonq.New().FromString(string(c.payload))
+	return nutsFhirValidation.CustodianFrom(jsonq)
 }
 
-func valueFromUrn(urn string) string {
-	segments := strings.Split(urn, ":")
-	return segments[len(segments)-1]
+func (c FhirConsentFact) Start() time.Time {
+	jsonq := gojsonq.New().FromString(string(c.payload))
+	return *nutsFhirValidation.PeriodFrom(jsonq)[0]
 }
 
-//func derefPointers(docReference *pkg.DocumentReference) map[string]interface{} {
-//	m := map[string]interface{}{}
-//
-//	if docReference == nil {
-//		return nil
-//	}
-//
-//	m["Title"] = docReference.Title
-//	m["ID"] = docReference.ID
-//
-//	if docReference.Hash != nil {
-//		m["Hash"] = *docReference.Hash
-//	}
-//
-//	if docReference.ContentType != nil {
-//		m["ContentType"] = *docReference.ContentType
-//	}
-//
-//	if docReference.URL != nil {
-//		m["URL"] = *docReference.URL
-//	}
-//
-//	return m
-//}
-
-// clean up the json hash
-func cleanupJSON(value string) (string, error) {
-	var parsedValue interface{}
-	if err := json.Unmarshal([]byte(value), &parsedValue); err != nil {
-		return "", err
+func (c FhirConsentFact) End() time.Time {
+	jsonq := gojsonq.New().FromString(string(c.payload))
+	end := nutsFhirValidation.PeriodFrom(jsonq)[1]
+	if end != nil {
+		return *end
 	}
-	cleanValue, err := json.Marshal(parsedValue)
-	if err != nil {
-		return "", err
-	}
-	return string(cleanValue), nil
+	return time.Time{}
 }
 
-func (cl FhirConsentFact) ValidateFhirConsentResource(consentResource string) (bool, error) {
-	validationClient := nutsFhirValidation.NewValidatorClient()
-
-	valid, errors, err := validationClient.ValidateAgainstSchema([]byte(consentResource))
-	if !valid {
-		fmt.Println(errors, err)
-		fmt.Print(consentResource)
-	}
-	return valid, err
+func (c FhirConsentFact) Subject() string {
+	jsonq := gojsonq.New().FromString(string(c.payload))
+	return nutsFhirValidation.SubjectFrom(jsonq)
 }
+
+func (c FhirConsentFact) Hash() string {
+	return fmt.Sprintf("%x", sha256.Sum256(c.payload))
+}
+
+func (c FhirConsentFact) Payload() []byte {
+	return c.payload
+}
+

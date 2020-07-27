@@ -20,9 +20,7 @@ type SyncChannel interface {
 type CordaChannel struct {
 }
 
-func (c CordaChannel) BuildFullConsentRequestState(eventID uuid.UUID, consentID []byte, consentFact ConsentFact) (bridgeClient.FullConsentRequestState, error) {
-
-	externalID := string(consentID)
+func (c CordaChannel) BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFact ConsentFact) (bridgeClient.FullConsentRequestState, error) {
 	now := time.Now()
 
 	var records []bridgeClient.ConsentRecord
@@ -137,5 +135,5 @@ func encryptConsentFact(consentFact ConsentFact) (types.DoubleEncryptedCipherTex
 	}
 	partyKeys = append(partyKeys, jwk)
 
-	return cryptoClient.EncryptKeyAndPlainText(consentFact.Payload, partyKeys)
+	return cryptoClient.EncryptKeyAndPlainText(consentFact.Payload(), partyKeys)
 }

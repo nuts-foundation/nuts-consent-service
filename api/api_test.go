@@ -22,6 +22,9 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/json"
+	eh "github.com/looplab/eventhorizon"
+	"github.com/looplab/eventhorizon/mocks"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	"github.com/nuts-foundation/nuts-crypto/pkg/cert"
 	mock3 "github.com/nuts-foundation/nuts-crypto/test/mock"
 	"net/http"
@@ -34,12 +37,10 @@ import (
 	"github.com/lestrrat-go/jwx/jwk"
 	"github.com/nuts-foundation/nuts-consent-service/pkg"
 	crypto "github.com/nuts-foundation/nuts-crypto/pkg"
-	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	mock2 "github.com/nuts-foundation/nuts-event-octopus/mock"
 	pkg2 "github.com/nuts-foundation/nuts-event-octopus/pkg"
 	registrymock "github.com/nuts-foundation/nuts-registry/mock"
 	registry "github.com/nuts-foundation/nuts-registry/pkg"
-	"github.com/nuts-foundation/nuts-registry/pkg/db"
 	uuid "github.com/satori/go.uuid"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
@@ -96,14 +97,15 @@ func TestApiResource_NutsConsentLogicCreateConsent(t *testing.T) {
 		publicKey, _ := jwk.New(sk.Public())
 		jwkMap, _ := cert.JwkToMap(publicKey)
 		jwkMap["kty"] = jwkMap["kty"].(jwa.KeyType).String() // annoying thing from jwk lib
-		registryMock.EXPECT().OrganizationById("agb:00000001").Return(&db.Organization{Keys: []interface{}{jwkMap}}, nil).Times(2)
+		//registryMock.EXPECT().OrganizationById("agb:00000001").Return(&db.Organization{Keys: []interface{}{jwkMap}}, nil).Times(2)
 		cryptoMock.EXPECT().GetPublicKeyAsJWK(gomock.Any()).Return(publicKey, nil).AnyTimes()
 		cryptoMock.EXPECT().PrivateKeyExists(gomock.Any()).Return(true).AnyTimes()
-		cryptoMock.EXPECT().CalculateExternalId(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("123external_id"), nil)
-		cryptoMock.EXPECT().EncryptKeyAndPlainText(gomock.Any(), gomock.Any()).Return(types.DoubleEncryptedCipherText{}, nil).Times(2)
+		//cryptoMock.EXPECT().CalculateExternalId(gomock.Any(), gomock.Any(), gomock.Any()).Return([]byte("123external_id"), nil)
+		//cryptoMock.EXPECT().EncryptKeyAndPlainText(gomock.Any(), gomock.Any()).Return(types.DoubleEncryptedCipherText{}, nil).Times(2)
 		octoMock.EXPECT().EventPublisher(gomock.Any()).Return(&EventPublisherMock{}, nil)
+		commandBus := &mocks.CommandHandler{}
 
-		apiWrapper := wrapper(registryMock, cryptoMock, octoMock)
+		apiWrapper := wrapper(registryMock, cryptoMock, octoMock, commandBus)
 		defer ctrl.Finish()
 		echoServer := mock.NewMockContext(ctrl)
 
@@ -118,6 +120,8 @@ func TestApiResource_NutsConsentLogicCreateConsent(t *testing.T) {
 		echoServer.EXPECT().JSON(http.StatusAccepted, JobCreatedResponseMatcher{})
 
 		assert.NoError(t, apiWrapper.CreateOrUpdateConsent(echoServer))
+		assert.Equal(t, 1, len(commandBus.Commands))
+		assert.Equal(t, commands.RegisterConsentCmdType, commandBus.Commands[0].CommandType())
 	})
 	t.Run("It handles an empty request body", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -376,7 +380,7 @@ func (JobCreatedResponseMatcher) String() string {
 	return "a successful created job"
 }
 
-func wrapper(registryClient registry.RegistryClient, cryptoClient crypto.Client, octopusClient pkg2.EventOctopusClient) *Wrapper {
+func wrapper(registryClient registry.RegistryClient, cryptoClient crypto.Client, octopusClient pkg2.EventOctopusClient, commandBus eh.CommandHandler) *Wrapper {
 
 	publisher, err := octopusClient.EventPublisher("consent-service")
 	if err != nil {
@@ -389,6 +393,7 @@ func wrapper(registryClient registry.RegistryClient, cryptoClient crypto.Client,
 			NutsCrypto:       cryptoClient,
 			NutsEventOctopus: octopusClient,
 			EventPublisher:   publisher,
+			CommandBus:       commandBus,
 		},
 	}
 }

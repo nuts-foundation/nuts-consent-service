@@ -21,6 +21,7 @@ func init() {
 type ReserveConsent struct {
 	ID uuid.UUID
 
+	ConsentID   uuid.UUID
 	CustodianID string
 	SubjectID   string
 	ActorID     string
@@ -43,5 +44,3 @@ func (cmd ReserveConsent) AggregateType() eventhorizon.AggregateType {
 func (cmd ReserveConsent) CommandType() eventhorizon.CommandType {
 	return ReserveConsentCmdType
 }
-
-

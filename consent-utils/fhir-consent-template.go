@@ -21,6 +21,7 @@ package consent_utils
 const template = `
 {
   "resourceType": "Consent",
+  "id": "{{logicalId}}",
   "meta": {
     "versionId": "{{versionId}}",
     "lastUpdated": "{{lastUpdated}}"

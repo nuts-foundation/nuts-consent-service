@@ -14,9 +14,9 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain"
 	"github.com/nuts-foundation/nuts-consent-service/domain/consent"
 	consentCommands "github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
-	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
+	domainEvents "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation"
-	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
+	negotiationCommands "github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	process_managers "github.com/nuts-foundation/nuts-consent-service/domain/process-managers"
 	treatment_relation "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation"
 	treatmentRelationCommands "github.com/nuts-foundation/nuts-consent-service/domain/treatment-relation/commands"
@@ -27,8 +27,8 @@ import (
 	nutsEventOctClient "github.com/nuts-foundation/nuts-event-octopus/client"
 	nutsEventOctopus "github.com/nuts-foundation/nuts-event-octopus/pkg"
 	core "github.com/nuts-foundation/nuts-go-core"
-	"github.com/nuts-foundation/nuts-registry/client"
-	"github.com/nuts-foundation/nuts-registry/pkg"
+	registryClient "github.com/nuts-foundation/nuts-registry/client"
+	registry "github.com/nuts-foundation/nuts-registry/pkg"
 	"log"
 	"sync"
 	"time"
@@ -43,13 +43,13 @@ type ConsentServiceClient interface {
 }
 
 type ConsentService struct {
-	NutsRegistry     pkg.RegistryClient
+	NutsRegistry     registry.RegistryClient
 	NutsCrypto       nutsCryptoPkg.Client
 	NutsConsentStore nutsConsentStorePkg.ConsentStoreClient
 	NutsEventOctopus nutsEventOctopus.EventOctopusClient
 	Config           ConsentServiceConfig
 	EventPublisher   nutsEventOctopus.IEventPublisher
-	CommandBus       *bus.CommandHandler
+	CommandBus       eh.CommandHandler
 }
 
 var instance *ConsentService
@@ -78,12 +78,12 @@ func (cl ConsentService) StartConsentFlow(request *CreateConsentRequest) (*uuid.
 		End:         end,
 	}
 	err := cl.CommandBus.HandleCommand(context.Background(), cmd)
-	return  &uuid, err
+	return &uuid, err
 
 }
 
 func (cl ConsentService) HandleIncomingCordaEvent(event *nutsEventOctopus.Event) {
-	panic("implement me")
+	logger.Logger().Debugf("incomming corda event: %+v'n", event)
 }
 
 func (cl ConsentService) Configure() error {
@@ -92,10 +92,10 @@ func (cl ConsentService) Configure() error {
 
 func (cl *ConsentService) Start() error {
 	cl.NutsCrypto = nutsCryptoPkg.NewCryptoClient()
-	cl.NutsRegistry = client.NewRegistryClient()
+	cl.NutsRegistry = registryClient.NewRegistryClient()
 	cl.NutsConsentStore = nutsConsentStoreClient.NewConsentStoreClient()
 	cl.NutsEventOctopus = nutsEventOctClient.NewEventOctopusClient()
-	// This module has no mode feature (server/client) so we delegate it completely to the global mode
+	// This module has no mode feature (server/registryClient) so we delegate it completely to the global mode
 	if core.NutsConfig().GetEngineMode("") != core.ServerEngineMode {
 		return nil
 	}
@@ -118,7 +118,7 @@ func (cl *ConsentService) Start() error {
 	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
 		return &negotiation.NegotiationAggregate{
 			AggregateBase:  events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
-			FactBuilder:    consent_utils.FhirConsentFact{},
+			FactBuilder:    consent_utils.FhirConsentFactBuilder{},
 			EventPublisher: publisher,
 		}
 	})
@@ -140,31 +140,34 @@ func (cl *ConsentService) Start() error {
 	treatmentCommandHander, err := aggregate.NewCommandHandler(domain.TreatmentRelationAggregateType, aggregateStore)
 	negotiationCommandHandler, err := aggregate.NewCommandHandler(domain.ConsentNegotiationAggregateType, aggregateStore)
 
-	commandBus.SetHandler(consentCommandHandler, consentCommands.RegisterConsentCmdType)
-	commandBus.SetHandler(treatmentCommandHander, treatmentRelationCommands.ReserveConsentCmdType)
-	commandBus.SetHandler(consentCommandHandler, consentCommands.RejectConsentCmdType)
-	commandBus.SetHandler(negotiationCommandHandler, commands.PrepareNegotiationCmdType)
-	commandBus.SetHandler(negotiationCommandHandler, commands.ProposeConsentFactCmdType)
+	if commandBus.SetHandler(consentCommandHandler, consentCommands.RegisterConsentCmdType) != nil ||
+		commandBus.SetHandler(treatmentCommandHander, treatmentRelationCommands.ReserveConsentCmdType) != nil ||
+		commandBus.SetHandler(consentCommandHandler, consentCommands.RejectConsentCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.PrepareNegotiationCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.ProposeConsentFactCmdType) != nil {
+		panic("could not set handler")
+	}
 
 	consentProgressManager := saga.NewEventHandler(process_managers.ConsentProgressManager{}, commandBus)
 	eventbus.AddHandler(eh.MatchAnyEventOf(
-		events2.ConsentRequestRegistered,
-		events2.ReservationAccepted,
-		events2.NegotiationPrepared,
+		domainEvents.ConsentRequestRegistered,
+		domainEvents.ReservationAccepted,
+		domainEvents.NegotiationPrepared,
+		domainEvents.ConsentProposed,
 	), consentProgressManager)
 
-	// TODO: handle these in the Negotiation Aggregate
-	//err = cl.NutsEventOctopus.Subscribe("consent-logic",
-	//	nutsEventOctopus.ChannelConsentRequest,
-	//	map[string]nutsEventOctopus.EventHandlerCallback{
-	//		nutsEventOctopus.EventDistributedConsentRequestReceived: cl.HandleIncomingCordaEvent,
+	// TODO: handle these by emitting commands
+	err = cl.NutsEventOctopus.Subscribe("consent-service",
+		nutsEventOctopus.ChannelConsentRequest,
+		map[string]nutsEventOctopus.EventHandlerCallback{
+			nutsEventOctopus.EventDistributedConsentRequestReceived: cl.HandleIncomingCordaEvent,
 	//		nutsEventOctopus.EventConsentRequestValid:               cl.HandleEventConsentRequestValid,
 	//		nutsEventOctopus.EventConsentRequestAcked:               cl.HandleEventConsentRequestAcked,
 	//		nutsEventOctopus.EventConsentDistributed:                cl.HandleEventConsentDistributed,
-	//	})
-	//if err != nil {
-	//	panic(err)
-	//}
+		})
+	if err != nil {
+		panic(err)
+	}
 	return nil
 }
 

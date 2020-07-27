@@ -33,30 +33,31 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 	logger.Logger().Tracef("[ConsentProsessManager] event: %+v\n", event)
 	switch event.EventType() {
 	case events.ConsentRequestRegistered:
-		data, ok := event.Data().(events.ConsentData)
+		consentRequestData, ok := event.Data().(events.ConsentData)
 		if !ok {
+			logger.Logger().Errorf("[ConsentProsessManager] could not cast consentRequestData from ConsentRequestRegistered event")
 			return nil
 		}
 
 		cryptoClient := nutsCryto.NewCryptoClient()
-		legalEntity := types.LegalEntity{URI: data.CustodianID}
+		legalEntity := types.LegalEntity{URI: consentRequestData.CustodianID}
 		entityKey := types.KeyForEntity(legalEntity)
 		custodianCheck := cryptoClient.PrivateKeyExists(entityKey)
 
 		if !custodianCheck {
 			return []eh.Command{
 				&consentCommands.RejectConsentRequest{
-					ID:     data.ID,
+					ID:     consentRequestData.ID,
 					Reason: "Custodian is not managed by this node",
 				},
 			}
 		}
 
-		treatmentID, err := c.CalculateExternalID(data)
+		treatmentID, err := c.CalculateExternalID(consentRequestData)
 		if err != nil {
 			return []eh.Command{
 				&consentCommands.RejectConsentRequest{
-					ID:     data.ID,
+					ID:     consentRequestData.ID,
 					Reason: fmt.Sprintf("Could not generate treatmentID: %s", err),
 				},
 			}
@@ -64,30 +65,40 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 
 		return []eh.Command{
 			&treatmentRelationCommands.ReserveConsent{
-				ID:          treatmentID,
-				CustodianID: data.CustodianID,
-				SubjectID:   data.SubjectID,
-				ActorID:     data.ActorID,
-				Class:       data.Class,
-				Start:       data.Start,
-				End:         data.End,
+				ID: treatmentID,
+
+				ConsentID:   consentRequestData.ID,
+				CustodianID: consentRequestData.CustodianID,
+				SubjectID:   consentRequestData.SubjectID,
+				ActorID:     consentRequestData.ActorID,
+				Class:       consentRequestData.Class,
+				Start:       consentRequestData.Start,
+				End:         consentRequestData.End,
 			},
 		}
 	case events.ReservationAccepted:
-		data, ok := event.Data().(events.ConsentData)
+		consentData, ok := event.Data().(events.ConsentData)
 		if !ok {
-			logger.Logger().Tracef("[ConsentProsessManager] could not cast data from ReservationAccepted event")
+			logger.Logger().Errorf("[ConsentProsessManager] could not cast consentRequestData from ReservationAccepted event")
+			return nil
 		}
 		return []eh.Command{
 			&commands.PrepareNegotiation{
 				ID:          uuid.New(),
-				ConsentData: data,
+				ConsentData: consentData,
+			},
+		}
+	case events.ReservationRejected:
+		return []eh.Command{
+			&consentCommands.RejectConsentRequest{
+				ID:     uuid.UUID{},
+				Reason: "ConsentRequest already exists for this combination of custodian, actor, subject, class and period",
 			},
 		}
 	case events.NegotiationPrepared:
-		//data, ok := event.Data().(events.NegotiationData)
+		//consentRequestData, ok := event.Data().(events.NegotiationData)
 		//if !ok {
-		//	pkg.Logger().Tracef("[ConsentProsessManager] could not cast data from NegotiationPrepared event")
+		//	pkg.Logger().Tracef("[ConsentProsessManager] could not cast consentRequestData from NegotiationPrepared event")
 		//}
 
 		return []eh.Command{
