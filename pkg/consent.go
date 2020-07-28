@@ -115,11 +115,17 @@ func (cl *ConsentService) Start() error {
 			AggregateBase: events.NewAggregateBase(domain.TreatmentRelationAggregateType, id),
 		}
 	})
+	cordaChannel := consent_utils.CordaChannel{
+		Registry:   cl.NutsRegistry,
+		NutsCrypto: cl.NutsCrypto,
+		Publisher:  publisher,
+	}
 	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
 		return &negotiation.NegotiationAggregate{
 			AggregateBase:  events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
 			FactBuilder:    consent_utils.FhirConsentFactBuilder{},
 			EventPublisher: publisher,
+			Channel:        cordaChannel,
 		}
 	})
 
@@ -160,10 +166,12 @@ func (cl *ConsentService) Start() error {
 	err = cl.NutsEventOctopus.Subscribe("consent-service",
 		nutsEventOctopus.ChannelConsentRequest,
 		map[string]nutsEventOctopus.EventHandlerCallback{
-			nutsEventOctopus.EventDistributedConsentRequestReceived: cl.HandleIncomingCordaEvent,
-	//		nutsEventOctopus.EventConsentRequestValid:               cl.HandleEventConsentRequestValid,
-	//		nutsEventOctopus.EventConsentRequestAcked:               cl.HandleEventConsentRequestAcked,
-	//		nutsEventOctopus.EventConsentDistributed:                cl.HandleEventConsentDistributed,
+			nutsEventOctopus.EventDistributedConsentRequestReceived: func(event *nutsEventOctopus.Event) {
+				cordaChannel.ReceiveEvent(event)
+			},
+			nutsEventOctopus.EventConsentRequestValid: cordaChannel.HandleEventConsentRequestValid,
+			nutsEventOctopus.EventConsentRequestAcked: cordaChannel.HandleEventConsentRequestAcked,
+			nutsEventOctopus.EventConsentDistributed:  cordaChannel.HandleEventConsentDistributed,
 		})
 	if err != nil {
 		panic(err)

@@ -22,8 +22,9 @@ import (
 
 type NegotiationAggregate struct {
 	*events.AggregateBase
-	FactBuilder consentutils.ConsentFactBuilder
-	EventPublisher   eventOctopus.IEventPublisher
+	FactBuilder    consentutils.ConsentFactBuilder
+	EventPublisher eventOctopus.IEventPublisher
+	Channel        consentutils.SyncChannel
 
 	ConsentFact []byte
 }
@@ -77,7 +78,6 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 	case *commands.ProposeConsent:
 		logger.Logger().Tracef("[NegotiationAggregate]: Propose consent for ID: %s", na.negotiationID())
 
-		channel := consentutils.CordaChannel{}
 		consentFact, nil := na.FactBuilder.FactFromBytes(na.ConsentFact)
 
 		// Create the externalID for the combination subject, custodian and actor.
@@ -87,7 +87,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 		binExternalID, err := cryptoClient.CalculateExternalId(consentFact.Subject(), consentFact.Actor(), entityKey)
 		externalID := hex.EncodeToString(binExternalID)
 
-		state, err := channel.BuildFullConsentRequestState(na.negotiationID(), externalID, consentFact)
+		state, err := na.Channel.BuildFullConsentRequestState(na.negotiationID(), externalID, consentFact)
 		if err != nil {
 			return fmt.Errorf("could not sync consent proposal: %w", err)
 		}
