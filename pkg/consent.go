@@ -167,7 +167,18 @@ func (cl *ConsentService) Start() error {
 		nutsEventOctopus.ChannelConsentRequest,
 		map[string]nutsEventOctopus.EventHandlerCallback{
 			nutsEventOctopus.EventDistributedConsentRequestReceived: func(event *nutsEventOctopus.Event) {
-				cordaChannel.ReceiveEvent(event)
+				err := cordaChannel.ReceiveEvent(event)
+				if err != nil {
+					logger.Logger().Error(err)
+					errorDescription := err.Error()
+					event.Error = &errorDescription
+					if err.Recoverable() {
+						cordaChannel.Publish(nutsEventOctopus.ChannelConsentRetry, event)
+					} else {
+						event.Name = nutsEventOctopus.EventErrored
+						cordaChannel.Publish(nutsEventOctopus.ChannelConsentRequest, event)
+					}
+				}
 			},
 			nutsEventOctopus.EventConsentRequestValid: cordaChannel.HandleEventConsentRequestValid,
 			nutsEventOctopus.EventConsentRequestAcked: cordaChannel.HandleEventConsentRequestAcked,

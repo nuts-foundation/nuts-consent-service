@@ -26,7 +26,7 @@ import (
 
 type SyncChannel interface {
 	BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFact ConsentFact) (bridgeClient.FullConsentRequestState, error)
-	ReceiveEvent(event interface{})
+	ReceiveEvent(event interface{}) core.Error
 }
 
 type CordaChannel struct {
@@ -48,25 +48,16 @@ func (c CordaChannel) logger() *logrus.Entry {
 	return logger.Logger()
 }
 
-func (c CordaChannel) ReceiveEvent(event interface{}) {
+func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 	cordaEvent := event.(*events.Event)
 	crs := bridgeClient.FullConsentRequestState{}
 	decodedPayload, err := base64.StdEncoding.DecodeString(cordaEvent.Payload)
 	if err != nil {
-		errorDescription := fmt.Sprintf("%s: could not base64 decode cordaEvent payload", identity())
-		cordaEvent.Error = &errorDescription
-		cordaEvent.Name = events.EventErrored
-		c.logger().WithError(err).Error(errorDescription)
-		_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
+		return core.Errorf("could not base64 decode cordaEvent payload: %w", false, err)
 	}
 	if err := json.Unmarshal(decodedPayload, &crs); err != nil {
 		// have cordaEvent-octopus handle redelivery or cancellation
-		errorDescription := fmt.Sprintf("%s: could not unmarshall cordaEvent payload", identity())
-		cordaEvent.Error = &errorDescription
-		cordaEvent.Name = events.EventErrored
-		c.logger().WithError(err).Error(errorDescription)
-		_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-		return
+		return core.Errorf("%s: could not unmarshall cordaEvent payload: %w", false, err)
 	}
 
 	// check if all parties signed all attachments, than this request can be finalized by the initiator
@@ -89,22 +80,12 @@ func (c CordaChannel) ReceiveEvent(event interface{}) {
 					legalEntityID := signature.LegalEntity
 					legalEntity, err := c.Registry.OrganizationById(string(legalEntityID))
 					if err != nil {
-						errorMsg := fmt.Sprintf("Could not get organization public key for: %s, err: %v", legalEntityID, err)
-						cordaEvent.Error = &errorMsg
-						c.logger().Debug(errorMsg)
-						_ = c.Publish(events.ChannelConsentRetry, cordaEvent)
-						return
+						return core.Errorf("could not get organization public key for: %s, err: %w", true, legalEntity, err)
 					}
 
 					jwkFromSig, err := cert.MapToJwk(signature.Signature.PublicKey.AdditionalProperties)
 					if err != nil {
-						errorMsg := fmt.Sprintf("%s: unable to parse signature public key as JWK: %v", identity(), err)
-						c.logger().Warn(errorMsg)
-						c.logger().Debugf("publicKey from signature: %s ", signature.Signature.PublicKey)
-						cordaEvent.Name = events.EventErrored
-						cordaEvent.Error = &errorMsg
-						_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-						return
+						return core.Errorf("%s: unable to parse signature public key as JWK: %v", false, identity(), err)
 					}
 
 					// Check if the organization owns the public key used for signing and whether it was valid at the moment of signing.
@@ -116,23 +97,12 @@ func (c CordaChannel) ReceiveEvent(event interface{}) {
 					// https://github.com/nuts-foundation/nuts-consent-logic/issues/45
 					checkTime := time.Now()
 					orgHasKey, err := legalEntity.HasKey(jwkFromSig, checkTime)
-					// Fixme: this error handling should be rewritten
 					if err != nil {
-						errorMsg := fmt.Sprintf("%s: could not check JWK against organization keys: %v", identity(), err)
-						c.logger().Warn(errorMsg)
-						cordaEvent.Name = events.EventErrored
-						cordaEvent.Error = &errorMsg
-						_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-						return
+						return core.Errorf("%s: could not check JWK against organization keys: %w", false, identity(), err)
 					}
 
 					if !orgHasKey {
-						errorMsg := fmt.Sprintf("%s:  organization %s did not have a valid signature for the corresponding public key at the given time %s", core.NutsConfig().Identity(), legalEntityID, checkTime.String())
-						c.logger().Warn(errorMsg)
-						cordaEvent.Name = events.EventErrored
-						cordaEvent.Error = &errorMsg
-						_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-						return
+						return core.Errorf("%s:  organization %s did not have a valid signature for the corresponding public key at the given time %s", false, core.NutsConfig().Identity(), legalEntityID, checkTime.String())
 					}
 
 					// checking the actual signature here is not required since it's already checked by the CordApp.
@@ -145,7 +115,7 @@ func (c CordaChannel) ReceiveEvent(event interface{}) {
 		} else {
 			c.logger().Debug("This node is not the initiator. Lets wait for the initiator to broadcast EventAllSignaturesPresent")
 		}
-		return
+		return nil
 	}
 
 	c.logger().Debugf("Handling ConsentRequestState: %+v", crs)
@@ -164,12 +134,7 @@ func (c CordaChannel) ReceiveEvent(event interface{}) {
 		// =======
 		fhirConsent, err := c.decryptConsentRecord(cr, legalEntityToSignFor)
 		if err != nil {
-			errorDescription := fmt.Sprintf("%s: could not decrypt consent record", identity())
-			cordaEvent.Name = events.EventErrored
-			cordaEvent.Error = &errorDescription
-			c.logger().WithError(err).Error(errorDescription)
-			_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-			return
+			return core.Errorf("%s: could not decrypt consent record", false, identity())
 		}
 
 		// validate consent record
@@ -177,12 +142,7 @@ func (c CordaChannel) ReceiveEvent(event interface{}) {
 		factBuilder := FhirConsentFactBuilder{}
 		fhirConsentFact, _ := factBuilder.FactFromBytes([]byte(fhirConsent))
 		if validationResult, err := factBuilder.VerifyFact(fhirConsentFact.Payload()); !validationResult || err != nil {
-			errorDescription := fmt.Sprintf("%s: consent record invalid", identity())
-			cordaEvent.Name = events.EventErrored
-			cordaEvent.Error = &errorDescription
-			c.logger().WithError(err).Error(errorDescription)
-			_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-			return
+			return core.Errorf("%s: consent record invalid", false, identity())
 		}
 
 		// publish EventConsentRequestValid
@@ -190,6 +150,7 @@ func (c CordaChannel) ReceiveEvent(event interface{}) {
 		cordaEvent.Name = events.EventConsentRequestValid
 		_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
 	}
+	return nil
 }
 
 func (c CordaChannel) decryptConsentRecord(cr bridgeClient.ConsentRecord, legalEntity string) (string, error) {
@@ -381,7 +342,6 @@ func (c CordaChannel) findFirstEntityToSignFor(signatures *[]bridgeClient.PartyA
 	return ""
 }
 
-
 // HandleEventConsentRequestValid republishes every event as acked.
 // TODO: This should be made optional so the ECD can perform checks and publish the ack or nack
 func (c CordaChannel) HandleEventConsentRequestValid(event *events.Event) {
@@ -559,8 +519,9 @@ func (c CordaChannel) HandleEventConsentDistributed(event *events.Event) {
 	}
 
 }
+
 // PatientConsentFromFHIRRecord extracts the PatientConsent from a FHIR consent record encoded as json string.
-func (CordaChannel) PatientConsentFromFHIRRecord(fhirConsents map[string]fhirResourceWithHash) cStore.PatientConsent{
+func (CordaChannel) PatientConsentFromFHIRRecord(fhirConsents map[string]fhirResourceWithHash) cStore.PatientConsent {
 	var patientConsent cStore.PatientConsent
 
 	// FixMe: we should add a check if the actors, subjects and custodians are all the same for each of these fhirConsents
