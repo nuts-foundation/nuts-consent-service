@@ -1,0 +1,124 @@
+{
+  "resourceType": "Consent",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2019-01-01T11:00:00Z"
+  },
+  "scope": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/consentscope",
+        "code": "patient-privacy"
+      }
+    ]
+  },
+  "category": [
+    {
+      "coding": [
+        {
+          "system": "http://loinc.org",
+          "code": "64292-6"
+        }
+      ]
+    }
+  ],
+  "patient": {
+    "identifier": {
+      "system": "urn:oid:2.16.840.1.113883.2.4.6.3",
+      "value": "999999990"
+    }
+  },
+  "performer": [
+    {
+      "type": "Organization",
+      "identifier": {
+        "system": "urn:oid:2.16.840.1.113883.2.4.6.1",
+        "value": "00000003"
+      }
+    }
+  ],
+  "organization": [
+    {
+      "identifier": {
+        "system": "urn:oid:2.16.840.1.113883.2.4.6.1",
+        "value": "00000000"
+      }
+    }
+  ],
+  "sourceAttachment": {
+    "contentType": "application/pdf",
+    "hash": "hash",
+    "id": "id",
+    "title": "title",
+    "url": "https://some.url/reference.pdf"
+  },
+  "verification": [
+    {
+      "verified": true,
+      "verifiedWith": {
+        "type": "Patient",
+        "identifier": {
+          "system": "urn:oid:2.16.840.1.113883.2.4.6.3",
+          "value": "999999990"
+        }
+      }
+    }
+  ],
+  "policyRule": {
+    "coding": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+        "code": "OPTIN"
+      }
+    ]
+  },
+  "provision": {
+    "actor": [
+      {
+        "role": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+              "code": "PRCP"
+            }
+          ]
+        },
+        "reference": {
+          "identifier": {
+            "system": "urn:oid:2.16.840.1.113883.2.4.6.1",
+            "value": "00000001"
+          }
+        }
+      }
+    ],
+    "period": {
+      "start": "2019-01-01T11:00:00Z",
+      "end": "2019-07-01T11:00:00Z"
+    },
+    "provision": [
+      {
+        "type": "permit",
+        "action": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/consentaction",
+                "code": "access"
+              }
+            ]
+          }
+        ],
+        "class": [
+          {
+            "system": "urn:oid:1.3.6.1.4.1.54851.1",
+            "code": "MEDICAL"
+          },
+          {
+            "system": "urn:oid:1.3.6.1.4.1.54851.1",
+            "code": "SOCIAL"
+          }
+        ]
+      }
+    ]
+  }
+}

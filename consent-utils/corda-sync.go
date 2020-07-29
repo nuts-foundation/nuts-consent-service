@@ -35,6 +35,11 @@ type CordaChannel struct {
 	Publisher  events.IEventPublisher
 }
 
+var TimeNow = func() time.Time {
+	return time.Now()
+}
+
+
 func identity() string {
 	return core.NutsConfig().Identity()
 }
@@ -57,7 +62,7 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 	}
 	if err := json.Unmarshal(decodedPayload, &crs); err != nil {
 		// have cordaEvent-octopus handle redelivery or cancellation
-		return core.Errorf("%s: could not unmarshall cordaEvent payload: %w", false, err)
+		return core.Errorf("could not unmarshall cordaEvent payload: %w", false, err)
 	}
 
 	// check if all parties signed all attachments, than this request can be finalized by the initiator
@@ -85,7 +90,7 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 
 					jwkFromSig, err := cert.MapToJwk(signature.Signature.PublicKey.AdditionalProperties)
 					if err != nil {
-						return core.Errorf("%s: unable to parse signature public key as JWK: %v", false, identity(), err)
+						return core.Errorf("unable to parse signature public key as JWK: %w", false, err)
 					}
 
 					// Check if the organization owns the public key used for signing and whether it was valid at the moment of signing.
@@ -95,14 +100,14 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 					// are valid for 1 year since they were introduced (april 2020). So we just have to make sure we
 					// switch to a signature format (JWS) which does contain the time of signing before april 2021.
 					// https://github.com/nuts-foundation/nuts-consent-logic/issues/45
-					checkTime := time.Now()
+					checkTime := TimeNow()
 					orgHasKey, err := legalEntity.HasKey(jwkFromSig, checkTime)
 					if err != nil {
-						return core.Errorf("%s: could not check JWK against organization keys: %w", false, identity(), err)
+						return core.Errorf("could not check JWK against organization keys: %w", false, err)
 					}
 
 					if !orgHasKey {
-						return core.Errorf("%s:  organization %s did not have a valid signature for the corresponding public key at the given time %s", false, core.NutsConfig().Identity(), legalEntityID, checkTime.String())
+						return core.Errorf("organization '%s' did not have a (valid) corresponding certificate for the public key used to sign the consent", false, legalEntityID)
 					}
 
 					// checking the actual signature here is not required since it's already checked by the CordApp.
