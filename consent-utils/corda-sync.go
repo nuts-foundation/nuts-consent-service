@@ -331,22 +331,22 @@ func encryptConsentFact(consentFact ConsentFact) (cryptoTypes.DoubleEncryptedCip
 		return cryptoTypes.DoubleEncryptedCipherText{}, err
 	}
 
-	jwk, err := organization.CurrentPublicKey()
+	pubKey, err := organization.CurrentPublicKey()
 	if err != nil {
 		return cryptoTypes.DoubleEncryptedCipherText{}, fmt.Errorf("registry entry for organization %v does not contain a public key", consentFact.Actor())
 	}
 
-	partyKeys = append(partyKeys, jwk)
+	partyKeys = append(partyKeys, pubKey)
 
 	// get public key for custodian
 	cryptoClient := pkg.NewCryptoClient()
 	keyIdentifier := cryptoTypes.KeyForEntity(cryptoTypes.LegalEntity{URI: consentFact.Custodian()})
-	jwk, err = cryptoClient.GetPublicKeyAsJWK(keyIdentifier)
+	pubKey, err = cryptoClient.GetPublicKeyAsJWK(keyIdentifier)
 	if err != nil {
 		logger.Logger().Errorf("error while getting public key for custodian: %v from crypto: %v\n", consentFact.Custodian(), err)
 		return cryptoTypes.DoubleEncryptedCipherText{}, err
 	}
-	partyKeys = append(partyKeys, jwk)
+	partyKeys = append(partyKeys, pubKey)
 
 	return cryptoClient.EncryptKeyAndPlainText(consentFact.Payload(), partyKeys)
 }
@@ -447,7 +447,7 @@ func (c CordaChannel) signConsentRequest(event events.Event) (*events.Event, err
 			return nil, err
 		}
 
-		jwk, err := cert.JwkToMap(pubKey)
+		jwkAsMap, err := cert.JwkToMap(pubKey)
 		if err != nil {
 			c.logger().Errorf("Error in transforming pubKey for %s: %v", legalEntityToSignFor, err)
 			return nil, err
@@ -470,7 +470,7 @@ func (c CordaChannel) signConsentRequest(event events.Event) (*events.Event, err
 			LegalEntity: bridgeClient.Identifier(legalEntityToSignFor),
 			Signature: bridgeClient.SignatureWithKey{
 				Data:      encodedSignatureBytes,
-				PublicKey: bridgeClient.JWK{AdditionalProperties: jwk},
+				PublicKey: bridgeClient.JWK{AdditionalProperties: jwkAsMap},
 			},
 		}
 
@@ -565,7 +565,7 @@ func (CordaChannel) PatientConsentFromFHIRRecord(fhirConsents map[string]fhirRes
 
 	// FixMe: we should add a check if the actors, subjects and custodians are all the same for each of these fhirConsents
 	for _, consent := range fhirConsents {
-		fhirConsent := gojsonq.New().JSONString(consent.FHIRResource)
+		fhirConsent := gojsonq.New().FromString(consent.FHIRResource)
 		patientConsent.Actor = string(fhirValidator.ActorsFrom(fhirConsent)[0])
 		patientConsent.Custodian = fhirValidator.CustodianFrom(fhirConsent)
 		patientConsent.Subject = fhirValidator.SubjectFrom(fhirConsent)
