@@ -54,26 +54,73 @@ func (c CordaChannel) logger() *logrus.Entry {
 }
 
 func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
-	cordaEvent := event.(*events.Event)
-	crs := bridgeClient.FullConsentRequestState{}
+	// 1. Unpack the event payload:
+	// ==============================
+
+	// cast
+	cordaEvent, ok := event.(*events.Event)
+	if !ok {
+		return core.Errorf("could not cast event into CordaEvent", false)
+	}
+
+	// base64 decode
 	decodedPayload, err := base64.StdEncoding.DecodeString(cordaEvent.Payload)
 	if err != nil {
 		return core.Errorf("could not base64 decode cordaEvent payload: %w", false, err)
 	}
+
+	// unmarshall
+	crs := bridgeClient.FullConsentRequestState{}
 	if err := json.Unmarshal(decodedPayload, &crs); err != nil {
-		// have cordaEvent-octopus handle redelivery or cancellation
 		return core.Errorf("could not unmarshall cordaEvent payload: %w", false, err)
 	}
 
-	// check if all parties signed all attachments, than this request can be finalized by the initiator
+	// 2. Check what needs to be done:
+	// =====================================
+
+	// Check if all parties signed all attachments, than this request can be finalized by the initiator
 	allSigned := true
-	for _, cr := range crs.ConsentRecords {
-		if cr.Signatures == nil || len(*cr.Signatures) != len(crs.LegalEntities) {
-			allSigned = false
-		}
+	// Stop a soon as we find a record with missing signatures
+	for i := 0; i < len(crs.ConsentRecords) && allSigned; i++ {
+		cr := crs.ConsentRecords[i]
+		allSigned = cr.Signatures != nil && len(*cr.Signatures) == len(crs.LegalEntities)
 	}
 
-	if allSigned {
+
+	if !allSigned {
+		c.logger().Debugf("Handling ConsentRequestState: %+v", crs)
+
+		for _, cr := range crs.ConsentRecords {
+			// find out which legal entity is ours and still needs signing? It can be more than one, but always take first one missing.
+			legalEntityToSignFor := c.findFirstEntityToSignFor(cr.Signatures, crs.LegalEntities)
+
+			// is there work for us?
+			if legalEntityToSignFor == "" {
+				// nothing to sign for this node/record.
+				continue
+			}
+
+			// decrypt
+			// =======
+			fhirConsent, err := c.decryptConsentRecord(cr, legalEntityToSignFor)
+			if err != nil {
+				return core.Errorf("%s: could not decrypt consent record", false, identity())
+			}
+
+			// validate consent record
+			// =======================
+			factBuilder := FhirConsentFactBuilder{}
+			fhirConsentFact, _ := factBuilder.FactFromBytes([]byte(fhirConsent))
+			if validationResult, err := factBuilder.VerifyFact(fhirConsentFact.Payload()); !validationResult || err != nil {
+				return core.Errorf("%s: consent record invalid", false, identity())
+			}
+
+			// publish EventConsentRequestValid
+			// ===========================
+			cordaEvent.Name = events.EventConsentRequestValid
+			_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
+		}
+	} else {
 		c.logger().Debugf("All signatures present for UUID: %s", cordaEvent.ConsentID)
 		// Is this node the initiator? InitiatorLegalEntity is only set at the initiating node.
 		if cordaEvent.InitiatorLegalEntity != "" {
@@ -120,41 +167,8 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 		} else {
 			c.logger().Debug("This node is not the initiator. Lets wait for the initiator to broadcast EventAllSignaturesPresent")
 		}
-		return nil
 	}
 
-	c.logger().Debugf("Handling ConsentRequestState: %+v", crs)
-
-	for _, cr := range crs.ConsentRecords {
-		// find out which legal entity is ours and still needs signing? It can be more than one, but always take first one missing.
-		legalEntityToSignFor := c.findFirstEntityToSignFor(cr.Signatures, crs.LegalEntities)
-
-		// is there work for us?
-		if legalEntityToSignFor == "" {
-			// nothing to sign for this node/record.
-			continue
-		}
-
-		// decrypt
-		// =======
-		fhirConsent, err := c.decryptConsentRecord(cr, legalEntityToSignFor)
-		if err != nil {
-			return core.Errorf("%s: could not decrypt consent record", false, identity())
-		}
-
-		// validate consent record
-		// =======================
-		factBuilder := FhirConsentFactBuilder{}
-		fhirConsentFact, _ := factBuilder.FactFromBytes([]byte(fhirConsent))
-		if validationResult, err := factBuilder.VerifyFact(fhirConsentFact.Payload()); !validationResult || err != nil {
-			return core.Errorf("%s: consent record invalid", false, identity())
-		}
-
-		// publish EventConsentRequestValid
-		// ===========================
-		cordaEvent.Name = events.EventConsentRequestValid
-		_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
-	}
 	return nil
 }
 
