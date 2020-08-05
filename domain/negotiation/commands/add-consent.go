@@ -7,27 +7,29 @@ import (
 	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 )
 
-const PrepareNegotiationCmdType = eventhorizon.CommandType("negotiation:prepare")
+const AddConsentCmdType = eventhorizon.CommandType("negotiation:add-consent")
 
 func init() {
 	eventhorizon.RegisterCommand(func() eventhorizon.Command {
-		return PrepareNegotiation{}
+		return &AddConsent{}
 	})
 }
 
-type PrepareNegotiation struct {
+type AddConsent struct {
 	ID uuid.UUID
 	ConsentData events.ConsentData
 }
 
-func (cmd PrepareNegotiation) AggregateID() uuid.UUID {
+func (cmd AddConsent) AggregateID() uuid.UUID {
 	return cmd.ID
 }
 
-func (cmd PrepareNegotiation) AggregateType() eventhorizon.AggregateType {
+func (cmd AddConsent) AggregateType() eventhorizon.AggregateType {
 	return domain.ConsentNegotiationAggregateType
 }
 
-func (cmd PrepareNegotiation) CommandType() eventhorizon.CommandType {
-	return PrepareNegotiationCmdType
+func (cmd AddConsent) CommandType() eventhorizon.CommandType {
+	return AddConsentCmdType
 }
+
+

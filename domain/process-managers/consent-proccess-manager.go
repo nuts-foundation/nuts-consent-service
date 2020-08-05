@@ -30,12 +30,12 @@ func (c ConsentProgressManager) SagaType() saga.Type {
 }
 
 func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []eh.Command {
-	logger.Logger().Tracef("[ConsentProsessManager] event: %+v\n", event)
+	logger.Logger().Debugf("[ConsentProgressManager] event: %+v\n", event)
 	switch event.EventType() {
 	case events.ConsentRequestRegistered:
 		consentRequestData, ok := event.Data().(events.ConsentData)
 		if !ok {
-			logger.Logger().Errorf("[ConsentProsessManager] could not cast consentRequestData from ConsentRequestRegistered event")
+			logger.Logger().Errorf("[ConsentProgressManager] could not cast consentRequestData from ConsentRequestRegistered event")
 			return nil
 		}
 
@@ -79,13 +79,18 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 	case events.ReservationAccepted:
 		consentData, ok := event.Data().(events.ConsentData)
 		if !ok {
-			logger.Logger().Errorf("[ConsentProsessManager] could not cast consentRequestData from ReservationAccepted event")
+			logger.Logger().Errorf("[ConsentProgressManager] could not cast consentRequestData from ReservationAccepted event")
 			return nil
 		}
+		negotiationID := uuid.New()
 		return []eh.Command{
-			&commands.PrepareNegotiation{
-				ID:          uuid.New(),
+			&commands.AddConsent{
+				ID:          negotiationID,
 				ConsentData: consentData,
+			},
+			&commands.ProposeConsent{
+				ID: negotiationID,
+				//ConsentData: consentData,
 			},
 		}
 	case events.ReservationRejected:
@@ -106,6 +111,13 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 				ID: event.AggregateID(),
 			},
 		}
+	case events.SignatureAdded:
+		//return []eh.Command{
+		//	&commands.MarkAllSigned{
+		//		ID: event.AggregateID(),
+		//	},
+		//}
+
 	}
 
 	return nil

@@ -115,24 +115,30 @@ func (cl *ConsentService) Start() error {
 			AggregateBase: events.NewAggregateBase(domain.TreatmentRelationAggregateType, id),
 		}
 	})
-	cordaChannel := consent_utils.CordaChannel{
-		Registry:   cl.NutsRegistry,
-		NutsCrypto: cl.NutsCrypto,
-		Publisher:  publisher,
-	}
-	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
-		return &negotiation.NegotiationAggregate{
-			AggregateBase:  events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
-			FactBuilder:    consent_utils.FhirConsentFactBuilder{},
-			EventPublisher: publisher,
-			Channel:        cordaChannel,
-		}
-	})
 
 	eventstore := memory.NewEventStore()
 	eventbus := local.NewEventBus(local.NewGroup())
 	commandBus := bus.NewCommandHandler()
 	cl.CommandBus = commandBus
+	fhirBuilder := consent_utils.FhirConsentFactBuilder{}
+
+	cordaChannel := consent_utils.CordaChannel{
+		Registry:   cl.NutsRegistry,
+		NutsCrypto: cl.NutsCrypto,
+		Publisher:  publisher,
+		CommandBus: cl.CommandBus,
+		FactBuilder: fhirBuilder,
+	}
+
+	eh.RegisterAggregate(func(id uuid.UUID) eh.Aggregate {
+		return &negotiation.NegotiationAggregate{
+			AggregateBase:  events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
+			FactBuilder:    fhirBuilder,
+			EventPublisher: publisher,
+			Channel:        cordaChannel,
+			Signatures:     map[string]map[string]string{},
+		}
+	})
 
 	eventLogger := &logger.EventLogger{}
 	eventbus.AddObserver(eh.MatchAny(), eventLogger)
@@ -149,8 +155,11 @@ func (cl *ConsentService) Start() error {
 	if commandBus.SetHandler(consentCommandHandler, consentCommands.RegisterConsentCmdType) != nil ||
 		commandBus.SetHandler(treatmentCommandHander, treatmentRelationCommands.ReserveConsentCmdType) != nil ||
 		commandBus.SetHandler(consentCommandHandler, consentCommands.RejectConsentCmdType) != nil ||
-		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.PrepareNegotiationCmdType) != nil ||
-		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.ProposeConsentFactCmdType) != nil {
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.ProposeConsentFactCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.AddConsentCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.MarkAllSignedCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.UpdateStateCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.AddSignatureCmdType) != nil {
 		panic("could not set handler")
 	}
 
@@ -160,6 +169,7 @@ func (cl *ConsentService) Start() error {
 		domainEvents.ReservationAccepted,
 		domainEvents.NegotiationPrepared,
 		domainEvents.ConsentProposed,
+		domainEvents.SignatureAdded,
 	), consentProgressManager)
 
 	// TODO: handle these by emitting commands
@@ -167,6 +177,7 @@ func (cl *ConsentService) Start() error {
 		nutsEventOctopus.ChannelConsentRequest,
 		map[string]nutsEventOctopus.EventHandlerCallback{
 			nutsEventOctopus.EventDistributedConsentRequestReceived: func(event *nutsEventOctopus.Event) {
+				cordaChannel.HandleUpdatedEventState(event)
 				err := cordaChannel.ReceiveEvent(event)
 				if err != nil {
 					logger.Logger().Error(err)
@@ -180,13 +191,33 @@ func (cl *ConsentService) Start() error {
 					}
 				}
 			},
-			nutsEventOctopus.EventConsentRequestValid: cordaChannel.HandleEventConsentRequestValid,
-			nutsEventOctopus.EventConsentRequestAcked: cordaChannel.HandleEventConsentRequestAcked,
-			nutsEventOctopus.EventConsentDistributed:  cordaChannel.HandleEventConsentDistributed,
+			nutsEventOctopus.EventConsentRequestConstructed: func(event *nutsEventOctopus.Event) {
+				cordaChannel.HandleUpdatedEventState(event)
+			},
+			nutsEventOctopus.EventConsentRequestValid: func(event *nutsEventOctopus.Event) {
+				cordaChannel.HandleUpdatedEventState(event)
+				cordaChannel.HandleEventConsentRequestValid(event)
+			},
+			nutsEventOctopus.EventConsentRequestAcked: func(event *nutsEventOctopus.Event) {
+				cordaChannel.HandleUpdatedEventState(event)
+				cordaChannel.HandleEventConsentRequestAcked(event)
+			} ,
+			nutsEventOctopus.EventConsentDistributed: func(event *nutsEventOctopus.Event) {
+				cordaChannel.HandleUpdatedEventState(event)
+				cordaChannel.HandleEventConsentDistributed(event)
+			},
 		})
 	if err != nil {
 		panic(err)
 	}
+
+	go func() {
+		for e := range eventbus.Errors() {
+			logger.Logger().Errorf("[eventbus] %s\n", e.Error())
+
+		}
+	}()
+
 	return nil
 }
 

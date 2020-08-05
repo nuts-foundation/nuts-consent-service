@@ -1,6 +1,7 @@
 package consent_utils
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -8,7 +9,9 @@ import (
 	"fmt"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/looplab/eventhorizon"
 	bridgeClient "github.com/nuts-foundation/consent-bridge-go-client/api"
+	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
 	cStore "github.com/nuts-foundation/nuts-consent-store/pkg"
 	"github.com/nuts-foundation/nuts-crypto/pkg"
@@ -25,28 +28,32 @@ import (
 )
 
 type SyncChannel interface {
-	BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFact ConsentFact) (bridgeClient.FullConsentRequestState, error)
+	BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFacts []ConsentFact) (bridgeClient.FullConsentRequestState, error)
 	ReceiveEvent(event interface{}) core.Error
+	Publish(subject string, event interface{}) error
 }
 
 type CordaChannel struct {
 	Registry   pkg2.RegistryClient
 	NutsCrypto pkg.Client
 	Publisher  events.IEventPublisher
+	CommandBus eventhorizon.CommandHandler
+	FactBuilder ConsentFactBuilder
+	AggregateStore eventhorizon.AggregateStore
 }
 
 var TimeNow = func() time.Time {
 	return time.Now()
 }
 
-
 func identity() string {
 	return core.NutsConfig().Identity()
 }
 
-func (c CordaChannel) Publish(eventName string, event *events.Event) error {
+func (c CordaChannel) Publish(subject string, event interface{}) error {
+	cordaEvent := event.(*events.Event)
 	c.logger().Debugf("Publishing corda event %+v\n", event)
-	return c.Publisher.Publish(eventName, *event)
+	return c.Publisher.Publish(subject, *cordaEvent)
 }
 
 func (c CordaChannel) logger() *logrus.Entry {
@@ -75,17 +82,75 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 		return core.Errorf("could not unmarshall cordaEvent payload: %w", false, err)
 	}
 
-	// 2. Check what needs to be done:
-	// =====================================
+	// 2. Update the Negotiaton Aggregate:
+	// ========================
+	negotiationID, err := uuid.Parse(cordaEvent.UUID)
 
-	// Check if all parties signed all attachments, than this request can be finalized by the initiator
+	//aggregate, err := c.AggregateStore.Load(context.Background(), domain.ConsentNegotiationAggregateType, negotiationID)
+	//if err != nil {
+	//	return core.Errorf("could not load aggregate with uuid: %s, err: %w", false, negotiationID, err)
+	//}
+	//
+	//negotiation, ok := aggregate.(negotiation2.NegotiationAggregate)
+	//if !ok {
+	//	return core.Errorf("could not cast aggregate to negotiationAggregate", false)
+	//}
+
+	// Add signatures
+	// Now check the public keys used by the signatures
+	for _, cr := range crs.ConsentRecords {
+		for _, signature := range *cr.Signatures {
+
+			// Get the published public key from register
+			legalEntityID := signature.LegalEntity
+			legalEntity, err := c.Registry.OrganizationById(string(legalEntityID))
+			if err != nil {
+				return core.Errorf("could not get organization public key for: %s, err: %w", true, legalEntity, err)
+			}
+
+			jwkFromSig, err := cert.MapToJwk(signature.Signature.PublicKey.AdditionalProperties)
+			if err != nil {
+				return core.Errorf("unable to parse signature public key as JWK: %w", false, err)
+			}
+
+			// Check if the organization owns the public key used for signing and whether it was valid at the moment of signing.
+			// ========================
+			// TODO: Checking it against the current time is wrong; it should be the time of signing.
+			// In practice this won't cause problems for now since certificates used for signing consent records
+			// are valid for 1 year since they were introduced (april 2020). So we just have to make sure we
+			// switch to a signature format (JWS) which does contain the time of signing before april 2021.
+			// https://github.com/nuts-foundation/nuts-consent-logic/issues/45
+			checkTime := TimeNow()
+			orgHasKey, err := legalEntity.HasKey(jwkFromSig, checkTime)
+			if err != nil {
+				return core.Errorf("could not check JWK against organization keys: %w", false, err)
+			}
+
+			if !orgHasKey {
+				return core.Errorf("organization '%s' did not have a (valid) corresponding certificate for the public key used to sign the consent", false, legalEntityID)
+			}
+
+			// Note: checking the actual signature cryptographically here is not required since it's already checked by the CordApp.
+
+			err = c.CommandBus.HandleCommand(context.Background(), &commands.AddSignature{
+				ID:          negotiationID,
+				ConsentHash: *cr.AttachmentHash,
+				Signature:   signature.Signature.Data,
+				PartyID:     string(legalEntityID),
+			})
+			if err != nil {
+				return core.Errorf("could not emit command: %w", false, err)
+			}
+		}
+	}
+
+	//// Check if all parties signed all attachments, than this request can be finalized by the initiator
 	allSigned := true
 	// Stop a soon as we find a record with missing signatures
 	for i := 0; i < len(crs.ConsentRecords) && allSigned; i++ {
 		cr := crs.ConsentRecords[i]
 		allSigned = cr.Signatures != nil && len(*cr.Signatures) == len(crs.LegalEntities)
 	}
-
 
 	if !allSigned {
 		c.logger().Debugf("Handling ConsentRequestState: %+v", crs)
@@ -102,16 +167,15 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 
 			// decrypt
 			// =======
-			fhirConsent, err := c.decryptConsentRecord(cr, legalEntityToSignFor)
+			rawConsent, err := c.decryptConsentRecord(cr, legalEntityToSignFor)
 			if err != nil {
 				return core.Errorf("%s: could not decrypt consent record", false, identity())
 			}
 
 			// validate consent record
 			// =======================
-			factBuilder := FhirConsentFactBuilder{}
-			fhirConsentFact, _ := factBuilder.FactFromBytes([]byte(fhirConsent))
-			if validationResult, err := factBuilder.VerifyFact(fhirConsentFact.Payload()); !validationResult || err != nil {
+			consentFact, _ := c.FactBuilder.FactFromBytes([]byte(rawConsent))
+			if validationResult, err := c.FactBuilder.VerifyFact(consentFact.Payload()); !validationResult || err != nil {
 				return core.Errorf("%s: consent record invalid", false, identity())
 			}
 
@@ -121,8 +185,8 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 			_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
 		}
 	} else {
-		c.logger().Debugf("All signatures present for UUID: %s", cordaEvent.ConsentID)
-		// Is this node the initiator? InitiatorLegalEntity is only set at the initiating node.
+		//c.logger().Debugf("All signatures present for UUID: %s", cordaEvent.ConsentID)
+		//// Is this node the initiator? InitiatorLegalEntity is only set at the initiating node.
 		if cordaEvent.InitiatorLegalEntity != "" {
 
 			// Now check the public keys used by the signatures
@@ -162,8 +226,8 @@ func (c CordaChannel) ReceiveEvent(event interface{}) core.Error {
 			}
 
 			c.logger().Debugf("Sending FinalizeRequest to bridge for UUID: %s", cordaEvent.ConsentID)
-			cordaEvent.Name = events.EventAllSignaturesPresent
-			_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
+			//cordaEvent.Name = events.EventAllSignaturesPresent
+			//_ = c.Publish(events.ChannelConsentRequest, cordaEvent)
 		} else {
 			c.logger().Debug("This node is not the initiator. Lets wait for the initiator to broadcast EventAllSignaturesPresent")
 		}
@@ -213,15 +277,19 @@ func (c CordaChannel) decryptConsentRecord(cr bridgeClient.ConsentRecord, legalE
 	return string(consentRecord), nil
 }
 
-func (c CordaChannel) BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFact ConsentFact) (bridgeClient.FullConsentRequestState, error) {
+func (c CordaChannel) BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFacts []ConsentFact) (bridgeClient.FullConsentRequestState, error) {
 	now := time.Now()
 
 	var records []bridgeClient.ConsentRecord
-	record, err := prepareRecord(consentFact)
-	if err != nil {
-		return bridgeClient.FullConsentRequestState{}, err
+	for _, consentFact := range consentFacts {
+		record, err := prepareRecord(consentFact)
+		if err != nil {
+			return bridgeClient.FullConsentRequestState{}, err
+		}
+		records = append(records, record)
 	}
-	records = append(records, record)
+
+	consentFact := consentFacts[0]
 
 	initiatingLegalEntitiy := consentFact.Custodian()
 	// TODO: get this from the config
@@ -359,6 +427,10 @@ func (c CordaChannel) findFirstEntityToSignFor(signatures *[]bridgeClient.PartyA
 		}
 	}
 	return ""
+}
+func (c CordaChannel) HandleUpdatedEventState(event *events.Event) {
+	id, _ := uuid.Parse(event.UUID)
+	c.CommandBus.HandleCommand(context.Background(), &commands.UpdateState{ID: id, State: *event})
 }
 
 // HandleEventConsentRequestValid republishes every event as acked.
