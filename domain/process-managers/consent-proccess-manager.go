@@ -53,7 +53,17 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 			}
 		}
 
-		treatmentID, err := c.CalculateExternalID(consentRequestData)
+		externalID, err := c.CalculateExternalID(consentRequestData)
+		if err != nil {
+			return []eh.Command{
+				&consentCommands.RejectConsentRequest{
+					ID:     consentRequestData.ID,
+					Reason: fmt.Sprintf("Could not generate treatmentID: %s", err),
+				},
+			}
+		}
+
+		treatmentID, err := uuid.NewSHA1(domain.NutsExternalIDSpace, externalID), nil
 		if err != nil {
 			return []eh.Command{
 				&consentCommands.RejectConsentRequest{
@@ -64,9 +74,14 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 		}
 
 		return []eh.Command{
+			&commands.CreateNegotiation{
+				ExternalNegotiationID: string(externalID),
+				CustodianID:           consentRequestData.CustodianID,
+				ActorID:               consentRequestData.ActorID,
+				SubjectID:             consentRequestData.SubjectID,
+			},
 			&treatmentRelationCommands.ReserveConsent{
-				ID: treatmentID,
-
+				ID:          treatmentID,
 				ConsentID:   consentRequestData.ID,
 				CustodianID: consentRequestData.CustodianID,
 				SubjectID:   consentRequestData.SubjectID,
@@ -90,7 +105,6 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 			},
 			&commands.ProposeConsent{
 				ID: negotiationID,
-				//ConsentData: consentData,
 			},
 		}
 	case events.ReservationRejected:
@@ -123,11 +137,15 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 	return nil
 }
 
-func (c ConsentProgressManager) CalculateExternalID(data events.ConsentData) (uuid.UUID, error) {
+func (c ConsentProgressManager) CalculateExternalID(data events.ConsentData) ([]byte, error) {
 	legalEntity := types.LegalEntity{URI: data.CustodianID}
 	entityKey := types.KeyForEntity(legalEntity)
 	cryptoClient := nutsCryto.NewCryptoClient()
-	externalID, err := cryptoClient.CalculateExternalId(data.SubjectID, data.ActorID, entityKey)
+	return cryptoClient.CalculateExternalId(data.SubjectID, data.ActorID, entityKey)
+}
+
+func (c ConsentProgressManager) CalculateExternalUUID(data events.ConsentData) (uuid.UUID, error) {
+	externalID, err := c.CalculateExternalID(data)
 	if err != nil {
 		return uuid.Nil, err
 	}

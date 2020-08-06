@@ -2,9 +2,6 @@ package negotiation
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
@@ -14,11 +11,13 @@ import (
 	domainEvents "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	"github.com/nuts-foundation/nuts-consent-service/pkg/logger"
-	nutsCryto "github.com/nuts-foundation/nuts-crypto/pkg"
-	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	eventOctopus "github.com/nuts-foundation/nuts-event-octopus/pkg"
 	"time"
 )
+
+var TimeNow = func() time.Time {
+	return time.Now()
+}
 
 type NegotiationAggregate struct {
 	// Services:
@@ -28,7 +27,12 @@ type NegotiationAggregate struct {
 	Channel        consentutils.SyncChannel
 
 	// Negotiation data:
-	Signatures     map[string]map[string]string
+	externalNegotiationID string
+	subjectID             string
+	custodianID           string
+	actorID               string
+
+	Signatures   map[string]map[string]string
 	ConsentFacts [][]byte
 	State        interface{}
 }
@@ -50,9 +54,18 @@ type VendorResponse struct {
 func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Command) error {
 	logger.Logger().Debugf("[NegotiationAggregate] command: %+v\n", command)
 	switch cmd := command.(type) {
+	case *commands.CreateNegotiation:
+		// TODO check if this negotiation is pristine, otherwise error
+		na.StoreEvent(domainEvents.NegotiationCreated, domainEvents.NegotiationBaseData{
+			ExternalNegotiationData: cmd.ExternalNegotiationID,
+			CustodianID:             cmd.CustodianID,
+			SubjectID:               cmd.SubjectID,
+			ActorID:                 cmd.ActorID,
+		}, TimeNow())
 	case *commands.UpdateState:
-		na.StoreEvent(domainEvents.NegotiationStateUpdated, domainEvents.ChannelStateData{State: cmd.State}, time.Now())
+		na.StoreEvent(domainEvents.NegotiationStateUpdated, domainEvents.ChannelStateData{State: cmd.State}, TimeNow())
 	case *commands.AddConsent:
+		// TODO check if the custodian, subject and actor are equal to this negotiation
 		var consentFact []byte
 		var err error
 
@@ -60,7 +73,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 		if consentFact, err = na.FactBuilder.BuildFact(cmd.ConsentData); err != nil {
 			na.StoreEvent(domainEvents.ConsentRequestFailed, domainEvents.FailedData{
 				Reason: fmt.Sprintf("Could not build the ConsentFact: %w", err),
-			}, time.Now())
+			}, TimeNow())
 		}
 		logger.Logger().Tracef("[NegotiationAggregate] ConsentFact created: %s\n", consentFact)
 
@@ -68,68 +81,30 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 		if validationResult, err := na.FactBuilder.VerifyFact(consentFact); !validationResult || err != nil {
 			na.StoreEvent(domainEvents.ConsentRequestFailed, domainEvents.FailedData{
 				Reason: fmt.Sprintf("Could not validate the ConsentFact: %w", err),
-			}, time.Now())
+			}, TimeNow())
 		}
 		logger.Logger().Tracef("[NegotiationAggregate] ConsentFact is valid")
 
 		na.StoreEvent(domainEvents.ConsentFactGenerated, domainEvents.ConsentFactData{
 			ConsentID:   cmd.ConsentData.ID,
 			ConsentFact: consentFact,
-		}, time.Now())
+		}, TimeNow())
 	case *commands.ProposeConsent:
 		logger.Logger().Debugf("[NegotiationAggregate]: Propose consent for ID: %s", na.negotiationID())
-		cryptoClient := nutsCryto.NewCryptoClient()
-		var (
-			consentFacts []consentutils.ConsentFact
-			externalID   string
-			// TODO get these from the aggregate
-			subject   string
-			custodian string
-			actor     string
-		)
+
+		var consentFacts []consentutils.ConsentFact
 
 		for _, factBytes := range na.ConsentFacts {
 			consentFact, _ := na.FactBuilder.FactFromBytes(factBytes)
 			consentFacts = append(consentFacts, consentFact)
-			subject = consentFact.Subject()
-			custodian = consentFact.Custodian()
-			actor = consentFact.Actor()
 		}
 
-		// Create the externalID for the combination subject, custodian and actor.
-		legalEntity := types.LegalEntity{URI: custodian}
-		entityKey := types.KeyForEntity(legalEntity)
-		binExternalID, err := cryptoClient.CalculateExternalId(subject, actor, entityKey)
-		if err != nil {
-			return err
-		}
-		externalID = hex.EncodeToString(binExternalID)
-
-		state, err := na.Channel.BuildFullConsentRequestState(na.negotiationID(), externalID, consentFacts)
+		err := na.Channel.StartSync(na.negotiationID(), na.externalNegotiationID, na.custodianID, consentFacts)
 		if err != nil {
 			return fmt.Errorf("could not sync consent proposal: %w", err)
 		}
+		na.StoreEvent(domainEvents.ConsentProposed, nil, TimeNow())
 
-		sjs, err := json.Marshal(state)
-		if err != nil {
-			return fmt.Errorf("failed to marshall NewConsentRequest to json: %v", err)
-		}
-		bsjs := base64.StdEncoding.EncodeToString(sjs)
-
-		cordaBridgeEvent := &eventOctopus.Event{
-			// Use the ID of this negotiation for the event UUID
-			UUID:                 na.negotiationID().String(),
-			Name:                 eventOctopus.EventConsentRequestConstructed,
-			InitiatorLegalEntity: custodian,
-			RetryCount:           0,
-			ExternalID:           externalID,
-			Payload:              bsjs,
-		}
-
-		err = na.Channel.Publish(eventOctopus.ChannelConsentRequest, cordaBridgeEvent)
-		if err == nil {
-			na.StoreEvent(domainEvents.ConsentProposed, nil, time.Now())
-		}
 		return err
 	case *commands.AddSignature:
 		logger.Logger().Debugf("[NegotiationAggregate]: Add signature to negotiation with ID: %s", na.negotiationID())
@@ -140,7 +115,7 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 				SigningParty: cmd.PartyID,
 				ConsentID:    cmd.ConsentHash,
 				Signature:    cmd.Signature,
-			}, time.Now())
+			}, TimeNow())
 			// apply event to the aggregate
 			if err := na.ApplyEvent(ctx, event); err != nil {
 				return err
@@ -167,10 +142,12 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 				return err
 			}
 
-			na.StoreEvent(domainEvents.AllSignaturesPresent, nil, time.Now())
+			na.StoreEvent(domainEvents.AllSignaturesPresent, nil, TimeNow())
 		}
-		//case *commands.MarkAllSigned:
-		//	logger.Logger().Debugf("[NegotiationAggregate]: trying to mark as all signed: %s", na.negotiationID())
+	//case *commands.MarkAllSigned:
+	//	logger.Logger().Debugf("[NegotiationAggregate]: trying to mark as all signed: %s", na.negotiationID())
+	default:
+		return fmt.Errorf("could not handle command: '%s', %w", cmd.CommandType(), domain.ErrUnknownCommand)
 	}
 	return nil
 }
@@ -178,12 +155,13 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 func (na *NegotiationAggregate) ApplyEvent(ctx context.Context, event eh.Event) error {
 	logger.Logger().Debugf("[NegotiationAggregate - %s] Hydrating aggregate with event: %+v\n", na.negotiationID(), event)
 	switch event.EventType() {
-	//case domainEvents.ConsentFactGenerated:
-	//	if data, ok := event.Data().(domainEvents.ConsentFactData); ok {
-	//		na.ConsentFacts[data.ConsentID] = data.ConsentFact
-	//	} else {
-	//		return fmt.Errorf("could not apply event: %w", domain.ErrInvalidEventData)
-	//	}
+	case domainEvents.NegotiationCreated:
+		if data, ok := event.Data().(domainEvents.NegotiationBaseData); ok {
+			na.externalNegotiationID = data.ExternalNegotiationData
+			na.custodianID = data.CustodianID
+			na.subjectID = data.SubjectID
+			na.actorID = data.ActorID
+		}
 	case domainEvents.ConsentFactGenerated:
 		if data, ok := event.Data().(domainEvents.ConsentFactData); ok {
 			na.ConsentFacts = append(na.ConsentFacts, data.ConsentFact)

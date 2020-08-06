@@ -159,6 +159,7 @@ func (cl *ConsentService) Start() error {
 		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.AddConsentCmdType) != nil ||
 		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.MarkAllSignedCmdType) != nil ||
 		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.UpdateStateCmdType) != nil ||
+		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.CreateNegotiationCmdType) != nil ||
 		commandBus.SetHandler(negotiationCommandHandler, negotiationCommands.AddSignatureCmdType) != nil {
 		panic("could not set handler")
 	}

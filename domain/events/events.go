@@ -10,12 +10,21 @@ const ConsentRequestRegistered = eh.EventType("consent:request-registered")
 const ConsentRequestFailed = eh.EventType("consent:request-failed")
 const ReservationAccepted = eh.EventType("treatment-relation:consent-reservation-accepted")
 const ReservationRejected = eh.EventType("treatment-relation:consent-reservation-rejected")
+
+const NegotiationCreated = eh.EventType("negotiation:created")
 const NegotiationPrepared = eh.EventType("negotiation:prepared")
 const ConsentProposed = eh.EventType("negotiation:proposed")
 const ConsentFactGenerated = eh.EventType("negotiation:consent-fact-generated")
 const SignatureAdded = eh.EventType("negotiation:signature-added")
 const AllSignaturesPresent = eh.EventType("negotiation:all-signatures-present")
 const NegotiationStateUpdated = eh.EventType("negotiation:state-updated")
+
+type NegotiationBaseData struct {
+	ExternalNegotiationData string
+	CustodianID             string
+	SubjectID               string
+	ActorID                 string
+}
 
 type ConsentData struct {
 	ID          uuid.UUID
@@ -72,5 +81,8 @@ func init() {
 	})
 	eh.RegisterEventData(NegotiationStateUpdated, func() eh.EventData {
 		return &ChannelStateData{}
+	})
+	eh.RegisterEventData(NegotiationCreated, func() eh.EventData {
+		return &NegotiationBaseData{}
 	})
 }

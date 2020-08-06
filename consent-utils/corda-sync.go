@@ -28,17 +28,20 @@ import (
 )
 
 type SyncChannel interface {
+	StartSync(eventID uuid.UUID, externalID string, initiatingPartyID string, consentFacts []ConsentFact) error
 	BuildFullConsentRequestState(eventID uuid.UUID, externalID string, consentFacts []ConsentFact) (bridgeClient.FullConsentRequestState, error)
 	ReceiveEvent(event interface{}) core.Error
 	Publish(subject string, event interface{}) error
 }
 
+var _ SyncChannel = (*CordaChannel)(nil)
+
 type CordaChannel struct {
-	Registry   pkg2.RegistryClient
-	NutsCrypto pkg.Client
-	Publisher  events.IEventPublisher
-	CommandBus eventhorizon.CommandHandler
-	FactBuilder ConsentFactBuilder
+	Registry       pkg2.RegistryClient
+	NutsCrypto     pkg.Client
+	Publisher      events.IEventPublisher
+	CommandBus     eventhorizon.CommandHandler
+	FactBuilder    ConsentFactBuilder
 	AggregateStore eventhorizon.AggregateStore
 }
 
@@ -48,6 +51,31 @@ var TimeNow = func() time.Time {
 
 func identity() string {
 	return core.NutsConfig().Identity()
+}
+
+func (c CordaChannel) StartSync(eventID uuid.UUID, externalID string, initiatingPartyID string, consentFacts []ConsentFact) error {
+	state, err := c.BuildFullConsentRequestState(eventID, externalID, consentFacts)
+	if err != nil {
+		return err
+	}
+
+	sjs, err := json.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("failed to marshall NewConsentRequest to json: %v", err)
+	}
+	bsjs := base64.StdEncoding.EncodeToString(sjs)
+
+	cordaBridgeEvent := &events.Event{
+		// Use the ID of this negotiation for the event UUID
+		UUID:                 eventID.String(),
+		Name:                 events.EventConsentRequestConstructed,
+		InitiatorLegalEntity: initiatingPartyID,
+		RetryCount:           0,
+		ExternalID:           externalID,
+		Payload:              bsjs,
+	}
+
+	return c.Publish(events.ChannelConsentRequest, cordaBridgeEvent)
 }
 
 func (c CordaChannel) Publish(subject string, event interface{}) error {
