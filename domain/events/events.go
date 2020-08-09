@@ -6,32 +6,83 @@ import (
 	"time"
 )
 
-const Proposed = eh.EventType("consent:proposed")
-const Canceled = eh.EventType("consent:canceled")
-const Errored = eh.EventType("consent:errored")
-const Unique = eh.EventType("consent:unique")
-const SyncStarted = eh.EventType("consent:sync-started")
+const ConsentRequestRegistered = eh.EventType("consent:request-registered")
+const ConsentRequestFailed = eh.EventType("consent:request-failed")
+const ReservationAccepted = eh.EventType("treatment-relation:consent-reservation-accepted")
+const ReservationRejected = eh.EventType("treatment-relation:consent-reservation-rejected")
 
-type ProposedData struct {
+const NegotiationCreated = eh.EventType("negotiation:created")
+const NegotiationPrepared = eh.EventType("negotiation:prepared")
+const ConsentProposed = eh.EventType("negotiation:proposed")
+const ConsentFactGenerated = eh.EventType("negotiation:consent-fact-generated")
+const SignatureAdded = eh.EventType("negotiation:signature-added")
+const AllSignaturesPresent = eh.EventType("negotiation:all-signatures-present")
+const NegotiationStateUpdated = eh.EventType("negotiation:state-updated")
+
+type NegotiationBaseData struct {
+	ExternalNegotiationData string
+	CustodianID             string
+	SubjectID               string
+	ActorID                 string
+}
+
+type ConsentData struct {
 	ID          uuid.UUID
 	CustodianID string
 	SubjectID   string
 	ActorID     string
+	Class       string
 	Start       time.Time
+	End         time.Time
+}
+
+type ConsentFactData struct {
+	ConsentID   uuid.UUID
+	ConsentFact []byte
+}
+
+type NegotiationData struct {
+	ConsentFact []byte
 }
 
 type SyncStartedData struct {
 	SyncID uuid.UUID
 }
 
-func init() {
-	eh.RegisterEventData(Proposed, func() eh.EventData {
-		return &ProposedData{}
-	})
-
-	eh.RegisterEventData(SyncStarted, func() eh.EventData {
-		return &SyncStartedData{}
-	})
+type FailedData struct {
+	Reason string
 }
 
+type SignatureData struct {
+	SigningParty string
+	ConsentID    string
+	Signature    string
+}
 
+type ChannelStateData struct {
+	State interface{}
+}
+
+func init() {
+	eh.RegisterEventData(ConsentRequestRegistered, func() eh.EventData {
+		return &ConsentData{}
+	})
+	eh.RegisterEventData(ReservationAccepted, func() eh.EventData {
+		return &ConsentData{}
+	})
+	eh.RegisterEventData(NegotiationPrepared, func() eh.EventData {
+		return &NegotiationData{}
+	})
+	eh.RegisterEventData(ConsentFactGenerated, func() eh.EventData {
+		return &ConsentFactData{}
+	})
+	eh.RegisterEventData(SignatureAdded, func() eh.EventData {
+		return &SignatureData{}
+	})
+	eh.RegisterEventData(NegotiationStateUpdated, func() eh.EventData {
+		return &ChannelStateData{}
+	})
+	eh.RegisterEventData(NegotiationCreated, func() eh.EventData {
+		return &NegotiationBaseData{}
+	})
+}

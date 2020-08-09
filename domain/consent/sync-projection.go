@@ -3,11 +3,9 @@ package consent
 import (
 	"context"
 	"errors"
-	"fmt"
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/eventhandler/projector"
-	"github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"log"
 	"time"
 )
@@ -41,27 +39,26 @@ func (p SyncProjector) Project(ctx context.Context, event eh.Event, entity eh.En
 	if !ok {
 		return nil, errors.New("model is of incorrect type")
 	}
-
-	switch event.EventType() {
-	case events.Proposed:
-		data, ok := event.Data().(events.ProposedData)
-		if !ok {
-			return nil, errors.New("event data of wrong type")
-		}
-		model.ID = event.AggregateID()
-		model.Contract = fmt.Sprintf("custodian:%s,actor:%s,subject:%s", data.CustodianID, data.ActorID, data.SubjectID)
-		model.PartyIDs = append(model.PartyIDs, data.SubjectID, data.CustodianID, data.ActorID)
-	//case events.Unique:
-	case events.SyncStarted:
-		data, ok := event.Data().(events.SyncStartedData)
-		if !ok {
-			return nil, errors.New("event data of wrong type")
-		}
-		model.SyncID = data.SyncID
-	default:
-		//return model, fmt.Errorf("could not project event: %s", event.EventType())
-		log.Printf("could not project event: %s\n", event.EventType())
-	}
+	//
+	//switch event.EventType() {
+	//case events.Proposed:
+	//	data, ok := event.Data().(events.ProposedData)
+	//	if !ok {
+	//		return nil, errors.New("event data of wrong type")
+	//	}
+	//	model.ID = event.AggregateID()
+	//	model.Contract = fmt.Sprintf("custodian:%s,actor:%s,subject:%s", data.CustodianID, data.ActorID, data.SubjectID)
+	//	model.PartyIDs = append(model.PartyIDs, data.SubjectID, data.CustodianID, data.ActorID)
+	////case events.Unique:
+	//case events.SyncStarted:
+	//	data, ok := event.Data().(events.SyncStartedData)
+	//	if !ok {
+	//		return nil, errors.New("event data of wrong type")
+	//	}
+	//	model.SyncID = data.SyncID
+	//default:
+	//	log.Printf("[SyncProjector] could not project event: %s\n", event.EventType())
+	//}
 	model.Version++
 	model.UpdatedAt = TimeNow()
 	return model, nil

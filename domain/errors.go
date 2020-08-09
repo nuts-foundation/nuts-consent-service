@@ -4,3 +4,4 @@ import "errors"
 
 var ErrAggregateCancelled = errors.New("aggregate cancelled")
 var ErrUnknownCommand = errors.New("unknown command")
+var ErrInvalidEventData = errors.New("invalid event data")

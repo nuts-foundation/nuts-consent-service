@@ -2,11 +2,13 @@ package consent
 
 import (
 	"context"
+	"errors"
 	"github.com/google/uuid"
 	eh "github.com/looplab/eventhorizon"
 	"github.com/looplab/eventhorizon/aggregatestore/events"
 	"github.com/looplab/eventhorizon/mocks"
 	"github.com/nuts-foundation/nuts-consent-service/domain"
+	"github.com/nuts-foundation/nuts-consent-service/domain/consent/commands"
 	events2 "github.com/nuts-foundation/nuts-consent-service/domain/events"
 	"reflect"
 	"testing"
@@ -27,7 +29,7 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 	}{
 		"unknown command": {
 			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
 			&mocks.Command{
 				ID:      id,
@@ -36,31 +38,23 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 			nil,
 			domain.ErrUnknownCommand,
 		},
-		"propose consent": {
+		"register consent": {
 			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
+				AggregateBase: events.NewAggregateBase(domain.ConsentAggregateType, id),
 			},
-			&Propose{
+			&commands.RegisterConsent{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
-			}, []eh.Event{eh.NewEventForAggregate(events2.Proposed, events2.ProposedData{
+			}, []eh.Event{eh.NewEventForAggregate(events2.ConsentRequestRegistered, events2.ConsentData{
 				ID:          id,
 				CustodianID: "agb:123",
 				SubjectID:   "bsn:999",
 				ActorID:     "agb:456",
 				Start:       TimeNow(),
-			},TimeNow(), ConsentAggregateType, id, 1)}, nil,
-		},
-		"any command when cancelled": {
-			&ConsentAggregate{
-				AggregateBase: events.NewAggregateBase(ConsentAggregateType, id),
-				State: ConsentRequestCanceled,
-			}, &mocks.Command{ID: id},
-			nil,
-			domain.ErrAggregateCancelled,
+			}, TimeNow(), domain.ConsentAggregateType, id, 1)}, nil,
 		},
 	}
 
@@ -70,7 +64,7 @@ func TestConsentRequestAggregate_HandleCommand(t *testing.T) {
 			err := testcase.agg.HandleCommand(context.Background(), testcase.cmd)
 			if (testcase.expectedError != nil && err == nil) ||
 				(testcase.expectedError == nil && err != nil) ||
-				(testcase.expectedError != nil && err != nil && err.Error() != testcase.expectedError.Error()) {
+				(testcase.expectedError != nil && err != nil && !(err.Error() == testcase.expectedError.Error() || errors.Is(err, testcase.expectedError))) {
 				t.Errorf("incorrect error result")
 				t.Log("exp error: ", testcase.expectedError)
 				t.Log("got error: ", err)
