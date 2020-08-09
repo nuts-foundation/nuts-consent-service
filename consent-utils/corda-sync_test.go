@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"github.com/golang/mock/gomock"
 	"github.com/lestrrat-go/jwx/jwk"
+	"github.com/looplab/eventhorizon/mocks"
 	"github.com/nuts-foundation/consent-bridge-go-client/api"
+	"github.com/nuts-foundation/nuts-consent-service/domain/negotiation/commands"
 	"github.com/nuts-foundation/nuts-crypto/pkg/cert"
 	"github.com/nuts-foundation/nuts-crypto/pkg/types"
 	cryptoClientMock "github.com/nuts-foundation/nuts-crypto/test/mock"
@@ -54,9 +56,11 @@ func TestCordaChannel_ReceiveEvent(t *testing.T) {
 			},
 		}
 		consentRequestState.LegalEntities = []api.Identifier{"urn:agb:00000002"}
+		attachmentHash := "123"
 		consentRequestState.ConsentRecords = []api.ConsentRecord{
 			{
 				Signatures: &signatures,
+				AttachmentHash: &attachmentHash,
 			},
 		}
 
@@ -65,17 +69,22 @@ func TestCordaChannel_ReceiveEvent(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			publisherMock := octopusClientMock.NewMockIEventPublisher(ctrl)
 			registryMock := registryClientMock.NewMockRegistryClient(ctrl)
-			registryMock.EXPECT().OrganizationById(gomock.Eq("urn:agb:00000002")).Return(getOrganization(&otherKey.PublicKey, validPublicKey), nil)
+			registryMock.EXPECT().OrganizationById(gomock.Eq("urn:agb:00000002")).Return(getOrganization(&otherKey.PublicKey, validPublicKey), nil).Times(2)
 
 			encodedState, _ = json.Marshal(consentRequestState)
 			payload := base64.StdEncoding.EncodeToString(encodedState)
 			event := &(pkg.Event{Name: pkg.EventDistributedConsentRequestReceived, Payload: payload, InitiatorLegalEntity: "urn:agb:00000001"})
-			publisherMock.EXPECT().Publish(gomock.Eq(pkg.ChannelConsentRequest), gomock.Any())
+			mockCommandBus := &mocks.CommandHandler{}
 
-			cc := CordaChannel{Publisher: publisherMock, Registry: registryMock}
+			cc := CordaChannel{Registry: registryMock, CommandBus: mockCommandBus}
 			err := cc.ReceiveEvent(event)
+			if assert.Equal(t, 1, len(mockCommandBus.Commands)) {
+				cmd, ok := mockCommandBus.Commands[0].(*commands.AddSignature)
+				if assert.True(t, ok) {
+					assert.Equal(t, "urn:agb:00000002", cmd.PartyID)
+				}
+			}
 			assert.NoError(t, err)
 		})
 

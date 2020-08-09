@@ -92,6 +92,18 @@ func TestNegotiationAggregate_HandleCommand(t *testing.T) {
 			}, TimeNow(), domain.ConsentNegotiationAggregateType, id, 1)},
 			expectedError: nil,
 		},
+		"err - create negotitation on existing one": {
+			agg: &NegotiationAggregate{
+				AggregateBase: events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),
+				externalNegotiationID: "123",
+			},
+			cmd: &commands.CreateNegotiation{
+				ID:          id,
+				ExternalNegotiationID: "876",
+			},
+			expectedEvents: nil,
+			expectedError: errors.New("negotiation already created"),
+		},
 		"ok - update channel state": {
 			agg: &NegotiationAggregate{
 				AggregateBase: events.NewAggregateBase(domain.ConsentNegotiationAggregateType, id),

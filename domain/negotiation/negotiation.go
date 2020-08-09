@@ -55,7 +55,9 @@ func (na NegotiationAggregate) HandleCommand(ctx context.Context, command eh.Com
 	logger.Logger().Debugf("[NegotiationAggregate] command: %+v\n", command)
 	switch cmd := command.(type) {
 	case *commands.CreateNegotiation:
-		// TODO check if this negotiation is pristine, otherwise error
+		if na.externalNegotiationID != "" {
+			return fmt.Errorf("negotiation already created")
+		}
 		na.StoreEvent(domainEvents.NegotiationCreated, domainEvents.NegotiationBaseData{
 			ExternalNegotiationData: cmd.ExternalNegotiationID,
 			CustodianID:             cmd.CustodianID,

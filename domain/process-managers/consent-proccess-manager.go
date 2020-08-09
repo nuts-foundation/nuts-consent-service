@@ -75,6 +75,7 @@ func (c ConsentProgressManager) RunSaga(ctx context.Context, event eh.Event) []e
 
 		return []eh.Command{
 			&commands.CreateNegotiation{
+				ID:                    uuid.New(),
 				ExternalNegotiationID: string(externalID),
 				CustodianID:           consentRequestData.CustodianID,
 				ActorID:               consentRequestData.ActorID,
